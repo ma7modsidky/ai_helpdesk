@@ -62,7 +62,8 @@ def test_filter_attaches_current_request_id() -> None:
     finally:
         reset_request_id(token)
 
-    assert record.request_id == "request-123"
+    # request_id is attached dynamically by the filter, so it is not on LogRecord.
+    assert record.request_id == "request-123"  # type: ignore[attr-defined]
 
 
 def test_filter_marks_absent_request_id() -> None:
@@ -71,21 +72,21 @@ def test_filter_marks_absent_request_id() -> None:
     assert get_request_id() is None
     RequestIdFilter().filter(record)
 
-    assert record.request_id == REQUEST_ID_ABSENT
+    assert record.request_id == REQUEST_ID_ABSENT  # type: ignore[attr-defined]
 
 
 def test_filter_does_not_overwrite_explicit_request_id() -> None:
     record = _make_record("hello")
-    record.request_id = "explicit"  # type: ignore[attr-defined]
+    record.request_id = "explicit"
 
     RequestIdFilter().filter(record)
 
-    assert record.request_id == "explicit"
+    assert record.request_id == "explicit"  # type: ignore[attr-defined]
 
 
 def test_json_formatter_emits_single_line_with_required_keys() -> None:
     record = _make_record("ticket created")
-    record.request_id = "abc123"  # type: ignore[attr-defined]
+    record.request_id = "abc123"
 
     output = JsonFormatter().format(record)
 
@@ -100,7 +101,7 @@ def test_json_formatter_emits_single_line_with_required_keys() -> None:
 
 def test_json_formatter_escapes_embedded_newlines() -> None:
     record = _make_record("first line\nsecond line")
-    record.request_id = "abc123"  # type: ignore[attr-defined]
+    record.request_id = "abc123"
 
     output = JsonFormatter().format(record)
 
@@ -113,7 +114,7 @@ def test_json_formatter_includes_exception_text() -> None:
         raise ValueError("boom")
     except ValueError:
         record = _make_record("failed", exc_info=sys.exc_info())
-    record.request_id = "abc123"  # type: ignore[attr-defined]
+    record.request_id = "abc123"
 
     payload = json.loads(JsonFormatter().format(record))
 
@@ -128,7 +129,7 @@ def test_json_formatter_uses_placeholder_without_request_context() -> None:
 
 def test_console_formatter_includes_request_id() -> None:
     record = _make_record("console line")
-    record.request_id = "req-9"  # type: ignore[attr-defined]
+    record.request_id = "req-9"
 
     assert "req-9" in ConsoleFormatter().format(record)
 

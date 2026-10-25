@@ -8,25 +8,25 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth import authenticate
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 
-User = get_user_model()
+from .models import User
 
 # The same message for unknown emails, wrong passwords, and inactive accounts so
 # the endpoint cannot be used to enumerate accounts.
 INVALID_CREDENTIALS_MESSAGE = "Invalid email or password."
 
 
-class UserSerializer(serializers.ModelSerializer):
+class UserSerializer(serializers.ModelSerializer[User]):
     class Meta:
         model = User
         fields = ("id", "email", "is_staff")
         read_only_fields = fields
 
 
-class LoginSerializer(serializers.Serializer):
+class LoginSerializer(serializers.Serializer[Any]):
     email = serializers.EmailField()
     password = serializers.CharField(
         trim_whitespace=False,
@@ -47,7 +47,7 @@ class LoginSerializer(serializers.Serializer):
         return attrs
 
 
-class LoginResponseSerializer(serializers.Serializer):
+class LoginResponseSerializer(serializers.Serializer[Any]):
     user = UserSerializer(read_only=True)
     csrf_token = serializers.CharField(
         read_only=True,
@@ -55,5 +55,5 @@ class LoginResponseSerializer(serializers.Serializer):
     )
 
 
-class CsrfTokenSerializer(serializers.Serializer):
+class CsrfTokenSerializer(serializers.Serializer[Any]):
     csrf_token = serializers.CharField(read_only=True)

@@ -6,12 +6,15 @@ Django's, and CSRF is enforced explicitly because DRF views are CSRF-exempt.
 
 from __future__ import annotations
 
+from typing import cast
+
 from django.contrib.auth import login as session_login
 from django.contrib.auth import logout as session_logout
 from django.middleware.csrf import get_token
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
@@ -19,6 +22,7 @@ from rest_framework.views import APIView
 from apps.common.csrf import enforce_csrf
 
 from .authentication import SessionAuthentication
+from .models import User
 from .serializers import (
     CsrfTokenSerializer,
     LoginResponseSerializer,
@@ -42,9 +46,10 @@ class CsrfTokenView(APIView):
         responses={200: CsrfTokenSerializer},
         description="Public. Sets the CSRF cookie and returns its value.",
     )
-    def get(self, request, **kwargs: object):  # type: ignore[no-untyped-def]
+    def get(self, request: Request, **kwargs: object) -> Response:
         # ``version`` arrives as a URL kwarg from the /api/<version>/ prefix.
-        return Response({"csrf_token": get_token(request)})
+        # CSRF and session helpers operate on the underlying Django request.
+        return Response({"csrf_token": get_token(request._request)})
 
 
 class LoginView(APIView):
@@ -70,18 +75,18 @@ class LoginView(APIView):
         },
         description="Public. Requires a CSRF token from /api/v1/auth/csrf/.",
     )
-    def post(self, request, **kwargs: object):  # type: ignore[no-untyped-def]
+    def post(self, request: Request, **kwargs: object) -> Response:
         enforce_csrf(request)
 
         serializer = LoginSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data["user"]
 
-        session_login(request, user)
+        session_login(request._request, user)
         # Django rotates the CSRF token on login; return the new value because the
         # cookie is httpOnly and the client cannot read it.
         return Response(
-            {"user": UserSerializer(user).data, "csrf_token": get_token(request)},
+            {"user": UserSerializer(user).data, "csrf_token": get_token(request._request)},
             status=status.HTTP_200_OK,
         )
 
@@ -94,8 +99,8 @@ class LogoutView(APIView):
         request=None,
         responses={204: OpenApiResponse(description="Session ended.")},
     )
-    def post(self, request, **kwargs: object):  # type: ignore[no-untyped-def]
-        session_logout(request)
+    def post(self, request: Request, **kwargs: object) -> Response:
+        session_logout(request._request)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -103,5 +108,6 @@ class MeView(APIView):
     """Return the authenticated user."""
 
     @extend_schema(summary="Current user", responses={200: UserSerializer})
-    def get(self, request, **kwargs: object):  # type: ignore[no-untyped-def]
-        return Response(UserSerializer(request.user).data)
+    def get(self, request: Request, **kwargs: object) -> Response:
+        # ``IsAuthenticated`` is the default permission, so this is a real user.
+        return Response(UserSerializer(cast("User", request.user)).data)

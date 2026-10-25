@@ -13,6 +13,8 @@ venv/
 .ruff_cache/
 .coverage
 htmlcov/
+coverage.xml
+.coverage.*
 
 # Node
 node_modules/

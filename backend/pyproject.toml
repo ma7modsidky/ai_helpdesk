@@ -12,7 +12,12 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "django-stubs>=5.2,<6",
+    "djangorestframework-stubs>=3.15,<4",
+    "factory-boy>=3.3,<4",
+    "mypy>=1.11,<2",
     "pytest>=9.0.3,<10",
+    "pytest-cov>=6,<8",
     "pytest-django>=4.9,<5",
     "ruff>=0.8,<1",
 ]
@@ -39,3 +44,45 @@ DJANGO_SETTINGS_MODULE = "config.settings.test"
 pythonpath = ["."]
 testpaths = ["apps", "tests"]
 addopts = "-ra --strict-markers --strict-config"
+
+[tool.mypy]
+python_version = "3.11"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+strict = true
+warn_unreachable = true
+show_error_codes = true
+exclude = ["migrations/", "\\.venv/"]
+
+[tool.django-stubs]
+django_settings_module = "config.settings.test"
+
+[[tool.mypy.overrides]]
+# factory_boy ships no type information and its metaclasses defeat inference.
+module = ["factory", "factory.*"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+branch = true
+# Behaviour lives in the apps; configuration modules are declarative and the
+# production ones are imported only in subprocesses, so measuring them would
+# report a failure that no test could ever fix.
+source = ["apps", "config"]
+omit = [
+    "*/migrations/*",
+    "*/tests/*",
+    "config/asgi.py",
+    "config/wsgi.py",
+    "config/settings/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+# Measured at 97% when this floor was set. The gap is deliberate: one untested
+# error branch should not fail the build, but a real drop must.
+fail_under = 90
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

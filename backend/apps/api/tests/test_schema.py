@@ -32,7 +32,9 @@ def test_schema_documents_auth_endpoints_with_cookie_auth(client: Client) -> Non
     assert "cookieAuth" in security_schemes
 
 
-def test_schema_passes_its_own_validator(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+def test_schema_passes_its_own_validator(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     destination = tmp_path / "schema.yaml"
 
     call_command("spectacular", "--validate", "--file", str(destination))

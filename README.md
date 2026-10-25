@@ -49,7 +49,7 @@ ai-helpdesk/
 └── README.md
 ```
 
-## Local development (current status: T1.1 backend foundation)
+## Local development (current status: T1.4 test infrastructure)
 
 Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), Docker with Compose.
 
@@ -90,15 +90,22 @@ Quality checks (run from `backend/`):
 ```bash
 uv run ruff check .
 uv run ruff format --check .
+uv run mypy .                # strict; django-stubs and DRF stubs supply the types
 uv run python manage.py check
 uv run python manage.py makemigrations --check --dry-run
 uv run pytest
+uv run pytest --cov            # branch coverage over app code, fails below the floor
 ```
 
 Continuous integration: `.github/workflows/backend-ci.yml` runs those same backend gates on every
 pull request and on pushes to `main` — dependencies installed from `uv.lock`, ruff lint and format
-check, Django system checks, migration consistency, and the full test suite against a PostgreSQL 16
-service. CI uses throwaway credentials and no repository secrets.
+check, mypy type checking, Django system checks, migration consistency, and the full test suite
+against a PostgreSQL 16 service. CI uses throwaway credentials and no repository secrets.
+
+Tests run with branch coverage over `apps/` and `config/env.py`, excluding migrations, tests, and
+settings modules. The floor is 90% against a measured 97%, configured in `pyproject.toml`, and the
+`coverage.xml` report is uploaded as a workflow artifact (diagnostic only — the failing gate is the
+test step's exit code).
 
 Supply-chain gates in the same job:
 

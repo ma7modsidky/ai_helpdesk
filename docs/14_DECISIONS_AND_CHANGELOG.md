@@ -105,8 +105,30 @@ Record material decisions using this template.
 - **Consequences:** Logout requires a JSON content type even with no payload; a form-encoded request returns `415 unsupported_media_type`. Login is throttled at 10 attempts per minute using the default local-memory cache, which is per-process until a shared cache lands in T5.1.
 - **Verification:** `apps/accounts/tests/test_auth_api.py` and `apps/common/tests/test_errors.py` cover the 401/403/415/429 paths, CSRF rejection, token rotation, and session teardown; the flow was also exercised over HTTP with a real server.
 
+### ADR-013: Factories for test data and a branch-coverage floor
+- **Status:** accepted
+- **Date:** 2026-10-25
+- **Context:** T1.4 requires factory fixtures and coverage, `11_TEST_STRATEGY.md` asks for a pragmatic baseline on domain code rather than a gamed global percentage, and `12_CI_CD.md` requires publishing a coverage report. Inline `Model.objects.create` setup would drift from the write path production uses and duplicate across tenant and ticket tests.
+- **Decision:** Use `factory_boy`, with one `factories.py` per app under `apps/<app>/tests/` (`UserFactory` writes through `User.objects.create_user`). Measure branch coverage over `apps` plus `config/env.py` and `config/urls.py`, excluding migrations, tests, and process entry points. Settings modules are excluded because they are declarative and the production one is imported only inside test subprocesses. Floor is 90% against a measured 97%.
+- **Alternatives:** Hand-written fixtures only (rejected: duplicated setup, and every new model adds another copy); `model_bakery` (rejected: calls `objects.create`, bypassing the manager invariants that `test_user_model.py` exists to guard); measuring `config/settings/prod.py` (rejected: only imported in a subprocess, so coverage would report 0% forever); setting the floor at the exact measured value (rejected: one uncovered error branch would fail unrelated builds).
+- **Consequences:** Each new app adds a `factories.py` beside its tests; the floor should be raised as the codebase matures; new code arrives with tests or CI fails. Coverage of production settings stays invisible to coverage.py by design and is still asserted by `test_settings.py`.
+- **Verification:** The suite reports 97% branch coverage with `--cov`; a deliberately higher floor exits non-zero, confirming the gate rather than only the report.
+
+### ADR-014: Static typing with mypy and Django/DRF stubs
+- **Status:** accepted
+- **Date:** 2026-10-25
+- **Context:** `12_CI_CD.md` lists type checks in the pull-request pipeline and the README's MVP-done list repeats it, but nothing enforced annotations. Django and DRF resolve most attributes dynamically, so a checker without stubs and plugins would either flood with false positives or check almost nothing.
+- **Decision:** mypy in strict mode with `mypy_django_plugin` and `mypy_drf_plugin`; `[tool.django-stubs]` points the plugin at `config.settings.test`; CI runs `mypy .` after the format check.
+- **Alternatives:** Pyright (rejected: no comparable Django ORM plugin, and it would add a Node toolchain to a Python-only job); checking only already-annotated files (rejected: leaves most of the code unchecked); adding `django-stubs-ext` as a runtime dependency with `monkeypatch()` in settings (rejected for now: every generic base this code parameterises — `BaseUserManager`, `ModelSerializer`, `DjangoModelFactory` — is already subscriptable in Django 5.2 and DRF 3.16, so it would ship a runtime package with no consumer; add it when a `ModelAdmin[_T]`-style base is actually needed).
+- **Consequences:** A handful of narrow `type: ignore`s document places where third-party typing cannot express this project — `UserAdmin` is bound to `AbstractUser` while ours derives from `AbstractBaseUser` (so it cannot be parameterised at all), drf-spectacular ships an untyped extension base, factory_boy's declarations and metaclass `__call__` are untyped, the middleware attaches `request_id` dynamically, and a list is passed to a queryset-typed paginator in a test-only view. Tests use `UserFactory.create()` rather than calling the factory class for the same reason.
+- **Verification:** `mypy .` reports no issues across 48 files; a deliberately invalid annotation fails the command, so the gate is proven rather than assumed.
+
 ## Changelog
 Add dated entries as features or specs change. Keep this file concise; detailed implementation notes belong in pull requests.
+
+- 2026-10-25: Type checking. Added mypy in strict mode with django-stubs and DRF stubs, annotations across models, serializers, views, admin, middleware, and the test suite, and a CI `mypy .` step. Recorded ADR-014.
+
+- 2026-10-25: T1.4 test infrastructure. Added `factory_boy` fixtures writing through the model managers, branch coverage over application code with a 90% floor against a measured 97%, a `coverage.xml` artefact in CI, and the backlog entry that defines the task. Recorded ADR-013.
 
 - 2026-10-25: T1.3 API foundation. DRF mounted at `/api/v1/` with URL path versioning, session authentication, a uniform error envelope carrying the request ID, bounded pagination, login throttling, and an OpenAPI 3 document at `/api/v1/schema/`. Added `GET/POST /auth/csrf|login|logout|me` and documented them in `04_API_CONTRACT.md`. 104 tests passing. Recorded ADR-012.
 

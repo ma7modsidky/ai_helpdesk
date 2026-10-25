@@ -12,6 +12,12 @@ Use one task prompt per implementation slice. The coding agent must read `09_AGE
 **Acceptance:** migrations run on PostgreSQL; system checks pass; DEBUG/secret config comes from environment; tests run.
 **Must read:** architecture, security, CI/CD specs.
 
+## T1.4 — Test infrastructure
+**Goal:** Standardise backend tests with factory fixtures, measured coverage, and a CI baseline that publishes the report.
+**Acceptance:** test objects are created through factories rather than inline setup, and factories reuse the manager methods production uses; branch coverage is measured over application code; a configured floor fails CI when coverage drops; the report is uploaded as a CI artifact.
+**Out of scope:** raising coverage of deliberately untested paths, frontend tests.
+**Must read:** test strategy, CI/CD specs.
+
 ## T2.1 — Workspace and membership
 **Goal:** Implement Workspace and Membership models with role choices, constraints, and migrations.
 **Acceptance:** unique membership constraint; model tests; no endpoint trusts a workspace ID without membership authorization.

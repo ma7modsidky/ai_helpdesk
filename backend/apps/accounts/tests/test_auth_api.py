@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 from django.conf import settings
-from django.contrib.auth import get_user_model
+from django.test import Client
+
+from apps.accounts.models import User
+from apps.accounts.tests.factories import UserFactory
+from tests.support import CsrfClient
 
 pytestmark = pytest.mark.django_db
 
@@ -15,7 +21,7 @@ CSRF = f"{API}/auth/csrf/"
 INVALID_CREDENTIALS = "Invalid email or password."
 
 
-def test_csrf_bootstrap_sets_httponly_cookie(client, csrf_client) -> None:
+def test_csrf_bootstrap_sets_httponly_cookie(client: Client, csrf_client: CsrfClient) -> None:
     response = client.get(CSRF)
 
     assert response.status_code == 200
@@ -25,7 +31,9 @@ def test_csrf_bootstrap_sets_httponly_cookie(client, csrf_client) -> None:
     assert cookie.value
 
 
-def test_login_creates_session_and_returns_rotated_csrf_token(csrf_client, agent_user) -> None:
+def test_login_creates_session_and_returns_rotated_csrf_token(
+    csrf_client: CsrfClient, agent_user: User
+) -> None:
     token_before = csrf_client.csrf_token
 
     response = csrf_client.post_json(
@@ -39,7 +47,7 @@ def test_login_creates_session_and_returns_rotated_csrf_token(csrf_client, agent
     assert settings.SESSION_COOKIE_NAME in response.cookies
 
 
-def test_email_login_is_case_insensitive(csrf_client, agent_user) -> None:
+def test_email_login_is_case_insensitive(csrf_client: CsrfClient, agent_user: User) -> None:
     response = csrf_client.post_json(
         LOGIN, {"email": "  AGENT@Example.COM ", "password": "s3cret-password"}
     )
@@ -48,7 +56,9 @@ def test_email_login_is_case_insensitive(csrf_client, agent_user) -> None:
     assert response.json()["user"]["email"] == "agent@example.com"
 
 
-def test_me_returns_the_authenticated_user_without_secrets(csrf_client, agent_user) -> None:
+def test_me_returns_the_authenticated_user_without_secrets(
+    csrf_client: CsrfClient, agent_user: User
+) -> None:
     csrf_client.post_json(LOGIN, {"email": "agent@example.com", "password": "s3cret-password"})
 
     response = csrf_client.get(ME)
@@ -59,7 +69,7 @@ def test_me_returns_the_authenticated_user_without_secrets(csrf_client, agent_us
     assert body["email"] == "agent@example.com"
 
 
-def test_logout_ends_the_session(csrf_client, agent_user) -> None:
+def test_logout_ends_the_session(csrf_client: CsrfClient, agent_user: User) -> None:
     login = csrf_client.post_json(
         LOGIN, {"email": "agent@example.com", "password": "s3cret-password"}
     )
@@ -78,14 +88,16 @@ def test_logout_ends_the_session(csrf_client, agent_user) -> None:
     assert csrf_client.get(ME).status_code == 401
 
 
-def test_logout_requires_authentication(client) -> None:
+def test_logout_requires_authentication(client: Client) -> None:
     response = client.post(LOGOUT)
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "not_authenticated"
 
 
-def test_wrong_password_and_unknown_email_are_indistinguishable(csrf_client, agent_user) -> None:
+def test_wrong_password_and_unknown_email_are_indistinguishable(
+    csrf_client: CsrfClient, agent_user: User
+) -> None:
     wrong_password = csrf_client.post_json(
         LOGIN, {"email": "agent@example.com", "password": "not-the-password"}
     )
@@ -103,8 +115,10 @@ def test_wrong_password_and_unknown_email_are_indistinguishable(csrf_client, age
     assert wrong["request_id"] != unknown["request_id"]
 
 
-def test_inactive_user_cannot_log_in(csrf_client) -> None:
-    get_user_model().objects.create_user("inactive@example.com", "s3cret-password", is_active=False)
+def test_inactive_user_cannot_log_in(
+    csrf_client: CsrfClient, user_factory: type[UserFactory]
+) -> None:
+    user_factory.create(email="inactive@example.com", is_active=False)
 
     response = csrf_client.post_json(
         LOGIN, {"email": "inactive@example.com", "password": "s3cret-password"}
@@ -114,8 +128,10 @@ def test_inactive_user_cannot_log_in(csrf_client) -> None:
     assert response.json()["error"]["message"] == INVALID_CREDENTIALS
 
 
-def test_login_is_rate_limited(csrf_client, agent_user) -> None:
-    limit = int(settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]["auth_login"].split("/")[0])
+def test_login_is_rate_limited(csrf_client: CsrfClient, agent_user: User) -> None:
+    # Settings are typed loosely, so the nested rate table needs a cast.
+    throttle_rates = cast("dict[str, str]", settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"])
+    limit = int(throttle_rates["auth_login"].split("/")[0])
 
     for _ in range(limit):
         throttled_or_invalid = csrf_client.post_json(

@@ -1,45 +1,23 @@
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterator
 
 import pytest
-from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import Client
 
-User = get_user_model()
+from apps.accounts.models import User
+from apps.accounts.tests.factories import DEFAULT_PASSWORD, UserFactory
+from tests.support import CsrfClient
 
-API = "/api/v1"
+AGENT_EMAIL = "agent@example.com"
 
 
 @pytest.fixture(autouse=True)
-def _isolate_throttle_cache() -> Any:
+def _isolate_throttle_cache() -> Iterator[None]:
     """Throttle counters live in the cache; never let one test leak into another."""
     cache.clear()
     yield
     cache.clear()
-
-
-class CsrfClient(Client):
-    """Test client that enforces CSRF, like a real browser posting a form."""
-
-    csrf_token: str
-
-    def __init__(self, **defaults: Any) -> None:
-        defaults["enforce_csrf_checks"] = True
-        super().__init__(**defaults)
-        self.csrf_token = ""
-
-    @classmethod
-    def from_csrf_endpoint(cls) -> CsrfClient:
-        client = cls()
-        response = client.get(f"{API}/auth/csrf/")
-        client.csrf_token = response.json()["csrf_token"]
-        return client
-
-    def post_json(self, path: str, payload: dict[str, Any], *, csrf: bool = True) -> Any:
-        headers = {"X-CSRFToken": self.csrf_token} if csrf else {}
-        return self.post(path, data=payload, content_type="application/json", headers=headers)
 
 
 @pytest.fixture
@@ -48,5 +26,11 @@ def csrf_client() -> CsrfClient:
 
 
 @pytest.fixture
-def agent_user() -> Any:
-    return User.objects.create_user("agent@example.com", "s3cret-password")
+def user_factory() -> type[UserFactory]:
+    """Expose the factory itself for tests that need several users."""
+    return UserFactory
+
+
+@pytest.fixture
+def agent_user() -> User:
+    return UserFactory.create(email=AGENT_EMAIL, password=DEFAULT_PASSWORD)

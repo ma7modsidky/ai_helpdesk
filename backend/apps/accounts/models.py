@@ -8,7 +8,7 @@ painful. Email is the login identifier; there is no username field.
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, ClassVar
 
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import PermissionsMixin
@@ -16,7 +16,7 @@ from django.db import models
 from django.utils import timezone
 
 
-class UserManager(BaseUserManager):
+class UserManager(BaseUserManager["User"]):
     """Create users with a normalized email address.
 
     All writes must pass through this manager or the model constructor plus
@@ -64,10 +64,13 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
 
-    objects = UserManager()
+    # Django's stubs declare Model.objects as a ClassVar; annotating it the same way
+    # avoids an "instance variable overriding class variable" error.
+    objects: ClassVar[UserManager] = UserManager()
 
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS: list[str] = []
+    # ClassVar for the same reason as ``objects``: the base declares it that way.
+    REQUIRED_FIELDS: ClassVar[list[str]] = []
 
     class Meta:
         verbose_name = "user"

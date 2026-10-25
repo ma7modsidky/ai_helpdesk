@@ -46,7 +46,9 @@ class RequestIdMiddleware:
         if request_id is None:
             request_id = uuid.uuid4().hex
 
-        request.request_id = request_id
+        # Django's HttpRequest has no slot for this, by design: it is the middleware's
+        # own annotation, read back through apps.common.errors.request_id_for.
+        request.request_id = request_id  # type: ignore[attr-defined]
         token = set_request_id(request_id)
         started = time.monotonic()
 

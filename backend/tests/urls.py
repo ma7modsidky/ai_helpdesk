@@ -6,9 +6,13 @@ are exercised through routes that exist only for tests.
 
 from __future__ import annotations
 
+from typing import NoReturn
+
 from django.http import HttpRequest
 from django.urls import path
 from rest_framework.permissions import AllowAny
+from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.common.pagination import BoundedPageNumberPagination
@@ -20,13 +24,20 @@ class PaginationProbeView(APIView):
     authentication_classes: list[type] = []
     permission_classes = [AllowAny]
 
-    def get(self, request):  # type: ignore[no-untyped-def]
+    def get(self, request: Request) -> Response:
         paginator = BoundedPageNumberPagination()
-        page = paginator.paginate_queryset(list(range(PROBE_ITEM_COUNT)), request, view=self)
+        # A list is a valid runtime input for page-number pagination and avoids
+        # creating 150 rows just to exercise the bounds; the stub only describes
+        # querysets.
+        page: list[int] | None = paginator.paginate_queryset(
+            list(range(PROBE_ITEM_COUNT)),  # type: ignore[arg-type]
+            request,
+            view=self,
+        )
         return paginator.get_paginated_response(page)
 
 
-def boom(request: HttpRequest):  # type: ignore[no-untyped-def]
+def boom(request: HttpRequest) -> NoReturn:
     raise RuntimeError("boom-should-never-reach-the-client")
 
 
