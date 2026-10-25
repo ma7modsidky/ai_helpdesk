@@ -49,7 +49,7 @@ ai-helpdesk/
 └── README.md
 ```
 
-## Local development (current status: T1.4 test infrastructure)
+## Local development (current status: T2.3 workspace endpoints)
 
 Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), Docker with Compose.
 
@@ -84,6 +84,11 @@ uv run python manage.py runserver
   OpenAPI document is at `GET /api/v1/schema/`. Every state-changing request must send
   `Content-Type: application/json`; errors always return
   `{"error": {"code", "message", "request_id"}}`.
+- Workspaces (T2.3): `GET/POST /api/v1/workspaces/` lists the caller's workspaces or creates one
+  (the caller becomes its owner); `GET /workspaces/{id}/members/` lists active members;
+  `PATCH /workspaces/{id}/members/{membership_id}/` changes a role or revokes access. Checks are
+  server-side: non-members see 404, insufficient roles see 403, and the last active owner cannot be
+  demoted or removed (409).
 - Health checks: `GET /health/live/` reports the process is up (200). `GET /health/ready/`
   reports required dependency readiness (200, or 503 with `{"status": "unavailable"}` and no
   internal detail when PostgreSQL is unreachable).

@@ -10,5 +10,6 @@ from drf_spectacular.views import SpectacularAPIView
 
 urlpatterns = [
     path("auth/", include("apps.accounts.urls")),
+    path("workspaces/", include("apps.organizations.urls")),
     path("schema/", SpectacularAPIView.as_view(), name="openapi-schema"),
 ]

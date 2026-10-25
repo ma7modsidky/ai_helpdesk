@@ -40,3 +40,19 @@ class CsrfClient(Client):
     ) -> _MonkeyPatchedWSGIResponse:
         headers = {"X-CSRFToken": self.csrf_token} if csrf else {}
         return self.post(path, data=payload, content_type="application/json", headers=headers)
+
+    def patch_json(self, path: str, payload: dict[str, Any]) -> _MonkeyPatchedWSGIResponse:
+        return self.patch(
+            path,
+            data=payload,
+            content_type="application/json",
+            headers={"X-CSRFToken": self.csrf_token},
+        )
+
+
+def login(client: CsrfClient, *, email: str, password: str) -> CsrfClient:
+    """Log in and adopt the rotated CSRF token, returning the same client."""
+    response = client.post_json(f"{API}/auth/login/", {"email": email, "password": password})
+    assert response.status_code == 200, response.content
+    client.csrf_token = response.json()["csrf_token"]
+    return client

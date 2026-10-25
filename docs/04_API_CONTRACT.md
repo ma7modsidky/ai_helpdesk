@@ -89,8 +89,36 @@ payload) together with `X-CSRFToken`. Resulting status codes:
 | Non-JSON request body | `415 unsupported_media_type` |
 | Too many login attempts | `429 throttled` + `Retry-After` |
 
-The workspace, ticket, knowledge-base, and SLA endpoints listed above remain the target contract and
-are implemented by later tasks.
+The ticket, knowledge-base, and SLA endpoints listed above remain the target contract and are
+implemented by later tasks. Workspace membership invitations are also still outstanding.
+
+## Workspaces and members (implemented)
+
+Session-authenticated. Every workspace route resolves the caller's active membership before doing
+any work, so a workspace the caller cannot see is indistinguishable from one that does not exist.
+
+- `GET /workspaces/` — paginated list of active workspaces where the caller has an active
+  membership. Rows: `id`, `name`, `slug`, `timezone`, `status`, `created_at`.
+- `POST /workspaces/` — JSON `{"name", "slug", "timezone"?}`; `timezone` is an IANA name and
+  defaults to `UTC`. Returns `201` with the workspace, and the caller becomes its `owner` in the
+  same transaction. A duplicate or malformed slug, or an unknown time zone, returns
+  `400 validation_error` with `error.details`.
+- `GET /workspaces/{workspace_id}/members/` — paginated active memberships; readable by any active
+  member. Rows: `id`, `user_id`, `email`, `role`, `status`, `created_at`.
+- `PATCH /workspaces/{workspace_id}/members/{membership_id}/` — JSON with `role` and/or `status`
+  (`active` or `removed`); at least one is required. Returns `200` with the membership.
+
+| Situation | Response |
+| --- | --- |
+| Caller is not a member, or the workspace is unknown or archived | `404 not_found` |
+| Caller's role lacks the capability (for example an agent changing a role) | `403 permission_denied` |
+| Admin targets another admin or any owner, or grants a role at or above their own | `403 permission_denied` |
+| The change would leave the workspace without an active owner | `409 conflict` |
+| Unknown role or status, or an empty body | `400 validation_error` |
+| The membership belongs to a different workspace | `404 not_found` |
+
+Only an owner may grant `owner`. Revoking a member keeps the row with `status: "removed"` and
+withdraws access immediately; an owner or admin can set it back to `active`.
 
 ## Versioning, pagination, and schema
 

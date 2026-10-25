@@ -61,6 +61,14 @@ class CsrfFailure(exceptions.APIException):
     default_code = "csrf_failed"
 
 
+class Conflict(exceptions.APIException):
+    """409 for a state conflict the client can resolve by re-reading the object."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_detail = "The request conflicts with the current state."
+    default_code = "conflict"
+
+
 def request_id_for(request: HttpRequest | None) -> str:
     """Return the correlation ID bound by the request middleware."""
     return getattr(request, "request_id", None) or REQUEST_ID_ABSENT
