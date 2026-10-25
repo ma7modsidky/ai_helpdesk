@@ -49,6 +49,59 @@ ai-helpdesk/
 └── README.md
 ```
 
+## Local development (current status: T1.1 backend foundation)
+
+Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), Docker with Compose.
+
+```bash
+cp .env.example .env          # then replace every placeholder value
+docker compose up -d postgres redis rabbitmq
+
+cd backend
+uv sync                       # installs Django, psycopg, pytest, ruff from uv.lock
+uv run python manage.py migrate
+uv run python manage.py runserver
+```
+
+- Configuration comes from environment variables; `.env` (git-ignored) is read by the
+  development and test settings only, and real environment variables always win.
+  Production settings refuse to start with `DEBUG` enabled, a missing or placeholder
+  `DJANGO_SECRET_KEY`, empty `DJANGO_ALLOWED_HOSTS`, or a missing database password.
+- `DJANGO_SETTINGS_MODULE` defaults to `config.settings.dev` for `manage.py` and to
+  `config.settings.prod` for WSGI/ASGI entry points.
+- Host ports for the local datastores are configurable (`POSTGRES_PORT`, `REDIS_PORT`,
+  `RABBITMQ_PORT`, `RABBITMQ_MANAGEMENT_PORT`) in case they clash with other projects.
+  `POSTGRES_PORT` is also the port Django connects to.
+- Logs are structured JSON (`DJANGO_LOG_FORMAT=console` for readable local output) and every
+  line carries a `request_id`. Each response echoes the ID in `X-Request-ID`: a client value is
+  accepted only if it matches `[A-Za-z0-9._-]{1,64}`, otherwise one is generated. Log lines
+  contain the method, path (never the query string), status, and duration — no bodies or headers.
+- Health checks: `GET /health/live/` reports the process is up (200). `GET /health/ready/`
+  reports required dependency readiness (200, or 503 with `{"status": "unavailable"}` and no
+  internal detail when PostgreSQL is unreachable).
+
+Quality checks (run from `backend/`):
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run python manage.py check
+uv run python manage.py makemigrations --check --dry-run
+uv run pytest
+```
+
+Continuous integration: `.github/workflows/backend-ci.yml` runs those same backend gates on every
+pull request and on pushes to `main` — dependencies installed from `uv.lock`, ruff lint and format
+check, Django system checks, migration consistency, and the full test suite against a PostgreSQL 16
+service. CI uses throwaway credentials and no repository secrets.
+
+Supply-chain gates in the same job:
+
+- `uv audit --locked` scans the locked dependency set against OSV and fails on any known
+  vulnerability. Fix findings or record an explicit, justified `--ignore` in the workflow.
+- `gitleaks` (pinned version, sha256-verified download) scans the full commit history for committed
+  secrets. It fails the build when a leak is found; rotate the credential, don't just delete the line.
+
 ## Definition of MVP done
 
 - A user can register/sign in and create or join a workspace through a controlled flow.

@@ -1,0 +1,100 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Scans, lint, checks, migrations, tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Throwaway credentials for this job only. No repository secrets are used in
+    # pull-request CI, and nothing here is a production value.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: resolveai
+          POSTGRES_USER: resolveai
+          POSTGRES_PASSWORD: ci-only-postgres-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U resolveai -d resolveai"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.test
+      POSTGRES_DB: resolveai
+      POSTGRES_USER: resolveai
+      POSTGRES_PASSWORD: ci-only-postgres-password
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: "5432"
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history so the secret scan inspects every commit, not just the branch tip.
+          fetch-depth: 0
+
+      - name: Secret scan
+        working-directory: ${{ github.workspace }}
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+          # sha256 of gitleaks_8.30.1_linux_x64.tar.gz, taken from the release checksums.
+          GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+        run: |
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
+          echo "${GITLEAKS_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" gitleaks
+          ./gitleaks git --redact --no-banner --exit-code 1 --verbose .
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies from lock file
+        run: uv sync --locked
+
+      # uv audit is marked experimental; it queries OSV for the locked dependency set and
+      # exits non-zero on any known vulnerability, so findings must be fixed or explicitly
+      # ignored with --ignore and a reason rather than allowed silently.
+      - name: Dependency vulnerability scan
+        run: uv audit --locked
+
+      - name: Lint
+        run: uv run --no-sync ruff check .
+
+      - name: Format check
+        run: uv run --no-sync ruff format --check .
+
+      - name: Django system checks
+        run: uv run --no-sync python manage.py check
+
+      - name: Migration consistency
+        run: uv run --no-sync python manage.py makemigrations --check --dry-run
+
+      - name: Tests
+        run: uv run --no-sync pytest
