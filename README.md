@@ -67,6 +67,9 @@ uv run python manage.py runserver
   development and test settings only, and real environment variables always win.
   Production settings refuse to start with `DEBUG` enabled, a missing or placeholder
   `DJANGO_SECRET_KEY`, empty `DJANGO_ALLOWED_HOSTS`, or a missing database password.
+  `DJANGO_CSRF_TRUSTED_ORIGINS` lists origins allowed to send CSRF-protected requests when
+  the SPA is served from a different origin than the API; it stays empty for the same-origin
+  deployment described above.
 - `DJANGO_SETTINGS_MODULE` defaults to `config.settings.dev` for `manage.py` and to
   `config.settings.prod` for WSGI/ASGI entry points.
 - Host ports for the local datastores are configurable (`POSTGRES_PORT`, `REDIS_PORT`,
@@ -102,10 +105,10 @@ pull request and on pushes to `main` — dependencies installed from `uv.lock`, 
 check, mypy type checking, Django system checks, migration consistency, and the full test suite
 against a PostgreSQL 16 service. CI uses throwaway credentials and no repository secrets.
 
-Tests run with branch coverage over `apps/` and `config/env.py`, excluding migrations, tests, and
-settings modules. The floor is 90% against a measured 97%, configured in `pyproject.toml`, and the
-`coverage.xml` report is uploaded as a workflow artifact (diagnostic only — the failing gate is the
-test step's exit code).
+Tests run with branch coverage over `apps/` plus `config/env.py` and `config/urls.py`, excluding
+migrations, tests, settings modules, and the WSGI/ASGI entry points. The floor is 90% against a
+measured 97%, configured in `pyproject.toml`, and the `coverage.xml` report is uploaded as a
+workflow artifact (diagnostic only — the failing gate is the test step's exit code).
 
 Supply-chain gates in the same job:
 

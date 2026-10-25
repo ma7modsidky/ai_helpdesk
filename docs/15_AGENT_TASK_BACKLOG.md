@@ -12,6 +12,18 @@ Use one task prompt per implementation slice. The coding agent must read `09_AGE
 **Acceptance:** migrations run on PostgreSQL; system checks pass; DEBUG/secret config comes from environment; tests run.
 **Must read:** architecture, security, CI/CD specs.
 
+## T1.2 — Settings, environment, logging, and health endpoints
+**Goal:** Split settings per environment, validate configuration from environment variables, add structured logging with request correlation, and expose health endpoints.
+**Acceptance:** production settings refuse to start with missing, placeholder, or insecure configuration; no secret appears in an error message or a log line; every log line carries a request ID that is echoed in `X-Request-ID`; liveness and readiness report process and dependency state without leaking internals.
+**Out of scope:** container health-check wiring, metrics, external error tracking.
+**Must read:** architecture, security, CI/CD specs.
+
+## T1.3 — API foundation
+**Goal:** Add DRF with URL path versioning, bounded pagination, a uniform error envelope, session authentication, and an OpenAPI document.
+**Acceptance:** every API error uses `{"error": {"code", "message", "request_id"}}`, including routing misses and unhandled exceptions; page size is bounded above and falls back safely below; an unsupported version returns 404; the OpenAPI document is served and passes its own validator.
+**Out of scope:** workspace, ticket, knowledge-base, and SLA endpoints.
+**Must read:** API contract, architecture, security specs.
+
 ## T1.4 — Test infrastructure
 **Goal:** Standardise backend tests with factory fixtures, measured coverage, and a CI baseline that publishes the report.
 **Acceptance:** test objects are created through factories rather than inline setup, and factories reuse the manager methods production uses; branch coverage is measured over application code; a configured floor fails CI when coverage drops; the report is uploaded as a CI artifact.

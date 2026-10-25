@@ -101,6 +101,11 @@ jobs:
       - name: Migration consistency
         run: uv run --no-sync python manage.py makemigrations --check --dry-run
 
+      # Applies the whole schema to the service database, so migrations are proven on
+      # PostgreSQL outside the pytest harness, which builds its own test database.
+      - name: Apply migrations
+        run: uv run --no-sync python manage.py migrate --noinput
+
       # The coverage floor is configured in pyproject.toml, and pytest exits non-zero
       # when it is missed, so this step is the gate as well as the report.
       - name: Tests

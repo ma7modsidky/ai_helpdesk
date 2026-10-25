@@ -126,6 +126,8 @@ Record material decisions using this template.
 ## Changelog
 Add dated entries as features or specs change. Keep this file concise; detailed implementation notes belong in pull requests.
 
+- 2026-10-25: Phase 1 closeout. Backfilled the T1.2 and T1.3 backlog entries, corrected the documented coverage scope in the README, added `DJANGO_CSRF_TRUSTED_ORIGINS` to `.env.example`, made CI apply migrations to its database explicitly, and replaced an inert `CORS_ALLOW_CREDENTIALS` setting with a note explaining why no CORS configuration exists.
+
 - 2026-10-25: Type checking. Added mypy in strict mode with django-stubs and DRF stubs, annotations across models, serializers, views, admin, middleware, and the test suite, and a CI `mypy .` step. Recorded ADR-014.
 
 - 2026-10-25: T1.4 test infrastructure. Added `factory_boy` fixtures writing through the model managers, branch coverage over application code with a 90% floor against a measured 97%, a `coverage.xml` artefact in CI, and the backlog entry that defines the task. Recorded ADR-013.

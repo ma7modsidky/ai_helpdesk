@@ -6,7 +6,7 @@ Run on every pull request:
 1. Backend dependency install from lock file.
 2. Backend formatting/lint/type checks.
 3. Django system checks.
-4. Migration consistency check (`makemigrations --check --dry-run`).
+4. Migration consistency check (`makemigrations --check --dry-run`) and applying the migrations to the CI database.
 5. Backend tests against PostgreSQL.
 6. Frontend dependency install from lock file.
 7. Frontend lint/type checks/tests/build.

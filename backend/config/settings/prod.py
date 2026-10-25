@@ -40,5 +40,6 @@ SECURE_HSTS_PRELOAD = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 
-# No credentialed cross-origin access: the SPA and API share one origin.
-CORS_ALLOW_CREDENTIALS = False
+# No CORS configuration is needed: the SPA and API are served from one origin, so no
+# cross-origin request carries credentials. If django-cors-headers is ever added, keep
+# CORS_ALLOW_CREDENTIALS off and allowlist explicit origins rather than using a wildcard.
