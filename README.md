@@ -76,6 +76,11 @@ uv run python manage.py runserver
   line carries a `request_id`. Each response echoes the ID in `X-Request-ID`: a client value is
   accepted only if it matches `[A-Za-z0-9._-]{1,64}`, otherwise one is generated. Log lines
   contain the method, path (never the query string), status, and duration — no bodies or headers.
+- API (T1.3): session authentication under `/api/v1/auth/` — `GET /auth/csrf/` for a token,
+  `POST /auth/login/` with JSON and `X-CSRFToken`, `POST /auth/logout/`, `GET /auth/me/`. The
+  OpenAPI document is at `GET /api/v1/schema/`. Every state-changing request must send
+  `Content-Type: application/json`; errors always return
+  `{"error": {"code", "message", "request_id"}}`.
 - Health checks: `GET /health/live/` reports the process is up (200). `GET /health/ready/`
   reports required dependency readiness (200, or 503 with `{"status": "unavailable"}` and no
   internal detail when PostgreSQL is unreachable).

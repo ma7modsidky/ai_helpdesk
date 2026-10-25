@@ -96,8 +96,19 @@ Record material decisions using this template.
 - **Consequences:** `uv audit` is flagged experimental, so its invocation may need revisiting on uv upgrades. Scans require network access to OSV and GitHub releases. Findings must be fixed or ignored explicitly with a justification; the pytest upgrade to 9.1.1 was driven by this gate.
 - **Verification:** The workflow is validated against GitHub's workflow schema and the scan commands were exercised locally (clean history scan, placeholder-only `.env.example`).
 
+### ADR-012: JSON-only bodies and explicit CSRF enforcement
+- **Status:** accepted
+- **Date:** 2026-10-25
+- **Context:** DRF views are CSRF-exempt, so login and logout need an explicit CSRF check. DRF's own check reads `request.POST`, which triggers body parsing, which in turn rejects any content type without a parser. Separately, DRF downgrades unauthenticated requests from 401 to 403 when the authenticator provides no challenge header, collapsing "log in" and "not allowed" into one status.
+- **Decision:** `apps.common.csrf.enforce_csrf` wraps DRF's session CSRF check and raises a dedicated `csrf_failed` error; every state-changing request must send `Content-Type: application/json` (empty `{}` when there is no payload); `apps.accounts.authentication.SessionAuthentication` declares a `Session` challenge so unauthenticated requests stay 401.
+- **Alternatives:** Allow form/multipart parsing (rejected: the contract is JSON and form parsing widens the surface); rely on Django's `CsrfViewMiddleware` (rejected: DRF views are exempt); accept DRF's 403 for anonymous clients (rejected: clients cannot tell "authenticate" from "forbidden", and `04_API_CONTRACT.md` specifies 401).
+- **Consequences:** Logout requires a JSON content type even with no payload; a form-encoded request returns `415 unsupported_media_type`. Login is throttled at 10 attempts per minute using the default local-memory cache, which is per-process until a shared cache lands in T5.1.
+- **Verification:** `apps/accounts/tests/test_auth_api.py` and `apps/common/tests/test_errors.py` cover the 401/403/415/429 paths, CSRF rejection, token rotation, and session teardown; the flow was also exercised over HTTP with a real server.
+
 ## Changelog
 Add dated entries as features or specs change. Keep this file concise; detailed implementation notes belong in pull requests.
+
+- 2026-10-25: T1.3 API foundation. DRF mounted at `/api/v1/` with URL path versioning, session authentication, a uniform error envelope carrying the request ID, bounded pagination, login throttling, and an OpenAPI 3 document at `/api/v1/schema/`. Added `GET/POST /auth/csrf|login|logout|me` and documented them in `04_API_CONTRACT.md`. 104 tests passing. Recorded ADR-012.
 
 - 2026-10-25: Supply-chain gates in CI. Added `uv audit --locked` and a pinned, checksum-verified gitleaks history scan to `backend-ci.yml`. Upgraded pytest 8.4.2 to 9.1.1 because the audit gate flagged CVE-2025-71176 in the pinned version; suite re-run green. Recorded ADR-011.
 - 2026-10-25: T0.4 CI skeleton. `.github/workflows/backend-ci.yml` installs from `uv.lock` and runs ruff lint/format, Django checks, migration consistency, and pytest against a PostgreSQL 16 service. Frontend jobs and container builds are deferred until those targets exist.

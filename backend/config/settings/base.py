@@ -40,6 +40,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "rest_framework",
+    "drf_spectacular",
     "apps.accounts",
 ]
 
@@ -85,6 +87,49 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
+
+
+# --- API ------------------------------------------------------------------
+# Session authentication only: no tokens are issued to the browser, so a leaked
+# localStorage entry cannot be replayed. Object authorization is re-evaluated on
+# every request, which makes membership revocation immediate.
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "apps.accounts.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
+    ],
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
+    "DEFAULT_VERSIONING_CLASS": "rest_framework.versioning.URLPathVersioning",
+    "DEFAULT_VERSION": "v1",
+    "ALLOWED_VERSIONS": ["v1"],
+    "DEFAULT_PAGINATION_CLASS": "apps.common.pagination.BoundedPageNumberPagination",
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "EXCEPTION_HANDLER": "apps.common.errors.exception_handler",
+    "DEFAULT_THROTTLE_RATES": {
+        "auth_login": "10/min",
+    },
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "ResolveAI Helpdesk API",
+    "DESCRIPTION": (
+        "Multi-tenant customer support API. All endpoints require an authenticated "
+        "session except the CSRF bootstrap and login endpoints. Errors always use "
+        '{"error": {"code", "message", "request_id"}}.'
+    ),
+    "VERSION": "v1",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "SCHEMA_PATH_PREFIX": r"/api/v1",
+    "COMPONENT_SPLIT_REQUEST": True,
+}
 
 
 # --- Database -------------------------------------------------------------

@@ -5,6 +5,8 @@ description = "Multi-tenant AI-assisted helpdesk backend"
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "Django>=5.2,<5.3",
+    "djangorestframework>=3.16,<4",
+    "drf-spectacular>=0.28,<1",
     "psycopg[binary]>=3.2,<4",
 ]
 
