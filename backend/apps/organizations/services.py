@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from uuid import UUID
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import QuerySet
 
 from apps.accounts.models import User
@@ -26,6 +26,7 @@ from .exceptions import (
     LastOwnerRequired,
     MembershipNotFound,
     WorkspaceNotFound,
+    WorkspaceSlugTaken,
 )
 from .models import Membership, MembershipRole, MembershipStatus, Workspace, WorkspaceStatus
 
@@ -157,14 +158,27 @@ def create_workspace(*, name: str, slug: str, owner: User, timezone: str = "UTC"
 
     A workspace with no owner would be unreachable through the API, so the two
     rows are never written separately.
+
+    The serializer's uniqueness check runs before this call and cannot be
+    trusted on its own: two requests can both pass it and then race to insert,
+    and the loser would otherwise get a 500 from the database. The unique
+    constraint is the authority, so its violation is translated here; ``slug``
+    is the only unique column of a workspace being inserted, and the membership
+    written alongside it is for a workspace that did not exist a moment ago, so
+    no other constraint can fire on this path. Catching the error outside the
+    ``atomic`` block is deliberate: the block must roll back first, and only then
+    may the connection be used again.
     """
-    with transaction.atomic():
-        workspace = Workspace.objects.create(name=name, slug=slug, timezone=timezone)
-        Membership.objects.create(
-            workspace=workspace,
-            user=owner,
-            role=MembershipRole.OWNER,
-        )
+    try:
+        with transaction.atomic():
+            workspace = Workspace.objects.create(name=name, slug=slug, timezone=timezone)
+            Membership.objects.create(
+                workspace=workspace,
+                user=owner,
+                role=MembershipRole.OWNER,
+            )
+    except IntegrityError as exc:
+        raise WorkspaceSlugTaken from exc
     return workspace
 
 
@@ -180,53 +194,74 @@ def change_membership(
     An admin may manage roles below their own but cannot create peers, touch
     another admin, or act on an owner; only an owner can grant owner. Whatever the
     caller's role, the workspace keeps at least one active owner.
+
+    The workspace row is locked for the duration, so the owner count read here and
+    the write it guards cannot interleave with another membership change in the
+    same workspace. The caller's own membership is re-read inside that lock: a
+    request that resolved as an admin may arrive after that admin was demoted.
     """
-    actor_role = membership_role(access.membership.role)
-    if not has_capability(access.membership, Capability.MEMBERS_MANAGE):
-        raise InsufficientRole(required=MembershipRole.ADMIN)
+    with transaction.atomic():
+        # Every membership mutation serialises on the tenant row; that is what turns
+        # "at least one owner" from two racy queries into a check-and-write.
+        workspace = (
+            Workspace.objects.select_for_update()
+            .filter(pk=access.workspace.pk, status=WorkspaceStatus.ACTIVE)
+            .first()
+        )
+        if workspace is None:
+            raise WorkspaceNotFound
 
-    membership = (
-        Membership.objects.select_related("user")
-        .filter(workspace=access.workspace, pk=membership_id)
-        .first()
-    )
-    if membership is None:
-        raise MembershipNotFound
+        actor = Membership.objects.filter(
+            pk=access.membership.pk,
+            workspace=workspace,
+            status=MembershipStatus.ACTIVE,
+        ).first()
+        if actor is None:
+            raise WorkspaceNotFound
 
-    target_role = membership_role(membership.role)
-    if actor_role is not MembershipRole.OWNER and (
-        target_role is MembershipRole.OWNER or role_rank(target_role) >= role_rank(actor_role)
-    ):
-        raise InsufficientRole(required=MembershipRole.OWNER)
+        actor_role = membership_role(actor.role)
+        if not has_capability(actor, Capability.MEMBERS_MANAGE):
+            raise InsufficientRole(required=MembershipRole.ADMIN)
 
-    new_role = membership_role(role) if role is not None else target_role
-    if new_role is not target_role and actor_role is not MembershipRole.OWNER:
-        if new_role is MembershipRole.OWNER or role_rank(new_role) >= role_rank(actor_role):
+        membership = Membership.objects.filter(workspace=workspace, pk=membership_id).first()
+        if membership is None:
+            raise MembershipNotFound
+
+        target_role = membership_role(membership.role)
+        if actor_role is not MembershipRole.OWNER and (
+            target_role is MembershipRole.OWNER or role_rank(target_role) >= role_rank(actor_role)
+        ):
             raise InsufficientRole(required=MembershipRole.OWNER)
 
-    new_status = (
-        MembershipStatus(status) if status is not None else MembershipStatus(membership.status)
-    )
-    if new_role is target_role and new_status is MembershipStatus(membership.status):
-        return membership
+        new_role = membership_role(role) if role is not None else target_role
+        if new_role is not target_role and actor_role is not MembershipRole.OWNER:
+            if new_role is MembershipRole.OWNER or role_rank(new_role) >= role_rank(actor_role):
+                raise InsufficientRole(required=MembershipRole.OWNER)
 
-    loses_ownership = target_role is MembershipRole.OWNER and (
-        new_role is not MembershipRole.OWNER or new_status is not MembershipStatus.ACTIVE
-    )
-    if loses_ownership:
-        another_owner = (
-            Membership.objects.filter(
-                workspace=access.workspace,
-                role=MembershipRole.OWNER,
-                status=MembershipStatus.ACTIVE,
-            )
-            .exclude(pk=membership.pk)
-            .exists()
+        new_status = (
+            MembershipStatus(status) if status is not None else MembershipStatus(membership.status)
         )
-        if not another_owner:
-            raise LastOwnerRequired
+        if new_role is target_role and new_status is MembershipStatus(membership.status):
+            return membership
 
-    membership.role = new_role.value
-    membership.status = new_status.value
-    membership.save(update_fields=["role", "status"])
+        loses_ownership = target_role is MembershipRole.OWNER and (
+            new_role is not MembershipRole.OWNER or new_status is not MembershipStatus.ACTIVE
+        )
+        if loses_ownership:
+            another_owner = (
+                Membership.objects.filter(
+                    workspace=workspace,
+                    role=MembershipRole.OWNER,
+                    status=MembershipStatus.ACTIVE,
+                )
+                .exclude(pk=membership.pk)
+                .exists()
+            )
+            if not another_owner:
+                raise LastOwnerRequired
+
+        membership.role = new_role.value
+        membership.status = new_status.value
+        membership.save(update_fields=["role", "status"])
+
     return membership

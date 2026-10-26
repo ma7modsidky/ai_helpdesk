@@ -1,4 +1,4 @@
-"""Workspace access failures.
+"""Workspace domain failures.
 
 These are domain errors, not HTTP errors: the service that raises them has no
 request object and no DRF dependency, so tasks and management commands can reuse
@@ -40,6 +40,19 @@ class MembershipNotFound(WorkspaceAccessError):
 
     def __init__(self) -> None:
         super().__init__("The requested membership was not found.")
+
+
+class WorkspaceSlugTaken(Exception):
+    """Another workspace already owns this slug.
+
+    Raised from the unique constraint rather than from a pre-check, because a
+    pre-check cannot be trusted: two requests can both pass it and then race to
+    insert. Not a ``WorkspaceAccessError`` — this is a conflict on input, not a
+    refusal to resolve a workspace.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("A workspace with this slug already exists.")
 
 
 class LastOwnerRequired(WorkspaceAccessError):

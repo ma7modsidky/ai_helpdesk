@@ -12,7 +12,7 @@ from uuid import UUID
 
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
-from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -22,7 +22,12 @@ from apps.accounts.models import User
 from apps.common.errors import Conflict
 from apps.common.pagination import BoundedPageNumberPagination
 
-from .exceptions import InsufficientRole, LastOwnerRequired, MembershipNotFound
+from .exceptions import (
+    InsufficientRole,
+    LastOwnerRequired,
+    MembershipNotFound,
+    WorkspaceSlugTaken,
+)
 from .models import Membership, MembershipStatus
 from .permissions import HasWorkspaceCapability, workspace_access_for
 from .serializers import (
@@ -69,12 +74,17 @@ class WorkspaceListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        workspace = create_workspace(
-            owner=cast(User, request.user),
-            name=data["name"],
-            slug=data["slug"],
-            timezone=data.get("timezone", "UTC"),
-        )
+        try:
+            workspace = create_workspace(
+                owner=cast(User, request.user),
+                name=data["name"],
+                slug=data["slug"],
+                timezone=data.get("timezone", "UTC"),
+            )
+        except WorkspaceSlugTaken as exc:
+            # Same envelope and field shape as the serializer's uniqueness check,
+            # so a client cannot tell a lost race from an eagerly rejected slug.
+            raise ValidationError({"slug": ["This slug is already taken."]}) from exc
         return Response(WorkspaceSerializer(workspace).data, status=status.HTTP_201_CREATED)
 
 

@@ -6,7 +6,12 @@ import pytest
 from django.test import Client
 
 from apps.accounts.tests.factories import DEFAULT_PASSWORD, UserFactory
-from apps.organizations.models import Membership, MembershipRole, MembershipStatus
+from apps.organizations.models import (
+    Membership,
+    MembershipRole,
+    MembershipStatus,
+    WorkspaceStatus,
+)
 from apps.organizations.tests.factories import (
     MembershipFactory,
     WorkspaceFactory,
@@ -188,6 +193,55 @@ def test_an_owner_may_step_down_when_another_owner_exists(csrf_client: CsrfClien
     assert response.status_code == 200
     membership.refresh_from_db()
     assert membership.role == MembershipRole.AGENT
+
+
+def test_an_archived_workspace_is_not_addressable(csrf_client: CsrfClient) -> None:
+    user = UserFactory.create(email="agent@example.com")
+    membership = MembershipFactory.create(
+        user=user,
+        workspace=WorkspaceFactory.create(status=WorkspaceStatus.ARCHIVED),
+    )
+    sign_in(csrf_client, user.email)
+
+    response = csrf_client.get(members_url(membership.workspace_id))
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "not_found"
+
+
+def test_an_archived_workspace_refuses_member_changes(csrf_client: CsrfClient) -> None:
+    owner = UserFactory.create(email="owner@example.com")
+    membership = MembershipFactory.create(
+        user=owner,
+        role=MembershipRole.OWNER,
+        workspace=WorkspaceFactory.create(status=WorkspaceStatus.ARCHIVED),
+    )
+    target = MembershipFactory.create(workspace=membership.workspace)
+    sign_in(csrf_client, owner.email)
+
+    response = csrf_client.patch_json(
+        member_url(membership.workspace_id, target.id), {"role": "manager"}
+    )
+
+    assert response.status_code == 404
+    target.refresh_from_db()
+    assert target.role == MembershipRole.AGENT
+
+
+def test_deactivating_an_account_ends_api_access(csrf_client: CsrfClient) -> None:
+    user = UserFactory.create(email="agent@example.com")
+    membership = MembershipFactory.create(user=user)
+    sign_in(csrf_client, user.email)
+
+    # Django's session authentication stops resolving an inactive user, so the
+    # request is anonymous by the time permissions run: 401, not 404.
+    user.is_active = False
+    user.save(update_fields=["is_active"])
+
+    response = csrf_client.get(members_url(membership.workspace_id))
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "not_authenticated"
 
 
 def test_a_membership_from_another_workspace_is_not_addressable(csrf_client: CsrfClient) -> None:

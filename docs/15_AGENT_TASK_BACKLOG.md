@@ -40,6 +40,18 @@ Use one task prompt per implementation slice. The coding agent must read `09_AGE
 **Acceptance:** member can access own workspace; non-member cannot access another workspace; removed membership loses access.
 **Security gate:** negative cross-tenant tests are required before continuing.
 
+## T2.3 — Role/permission matrix and endpoint permissions
+**Goal:** Define the role capability matrix and enforce it on workspace endpoints through a reusable permission class.
+**Acceptance:** every workspace-scoped endpoint resolves membership before doing work; a non-member receives 404 and an insufficient role 403 in the standard error envelope; workspace creation assigns the creator as owner in the same transaction; the matrix is covered by tests for every role and capability.
+**Out of scope:** invitations, ticket and knowledge-base permissions.
+**Must read:** API contract, security spec, domain model.
+
+## T2.4 — Cross-tenant negative tests for every tenant-owned resource
+**Goal:** Prove that no endpoint can reach another tenant's data, and keep that proof current as new tenant-owned resources appear.
+**Acceptance:** for every tenant-owned model and endpoint, a test asserts that a user of one workspace cannot list, read, or mutate another workspace's rows — the result is 404 or an empty list, never data; a new tenant-owned resource lands with its negative test in the same change.
+**Security gate:** never permanently complete; re-run for every resource added in later phases.
+**Must read:** security spec, test strategy.
+
 ## T3.1 — Ticket models
 **Goal:** Implement Ticket, TicketMessage, and audit/event models with indexes and constraints.
 **Acceptance:** valid relationships; public reply/internal note distinction; status/priority choices; model tests.
