@@ -24,9 +24,11 @@ from apps.common.csrf import enforce_csrf
 from .authentication import SessionAuthentication
 from .models import User
 from .serializers import (
+    AuthResponseSerializer,
     CsrfTokenSerializer,
     LoginResponseSerializer,
     LoginSerializer,
+    RegisterSerializer,
     UserSerializer,
 )
 
@@ -50,6 +52,44 @@ class CsrfTokenView(APIView):
         # ``version`` arrives as a URL kwarg from the /api/<version>/ prefix.
         # CSRF and session helpers operate on the underlying Django request.
         return Response({"csrf_token": get_token(request._request)})
+
+
+class RegisterView(APIView):
+    """Create an account and sign it in.
+
+    The account gets no workspace and no membership: access to a tenant is granted
+    by creating one or by accepting an invitation, never as a side effect of
+    signing up. Public, but CSRF-protected because it establishes a session.
+    """
+
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_register"
+
+    @extend_schema(
+        summary="Register",
+        request=RegisterSerializer,
+        responses={
+            201: AuthResponseSerializer,
+            400: OpenApiResponse(description="Malformed input, duplicate email, weak password."),
+            403: OpenApiResponse(description="Missing or invalid CSRF token."),
+            429: OpenApiResponse(description="Too many attempts."),
+        },
+        description="Public. Requires a CSRF token from /api/v1/auth/csrf/.",
+    )
+    def post(self, request: Request, **kwargs: object) -> Response:
+        enforce_csrf(request)
+
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = cast(User, serializer.save())
+
+        session_login(request._request, user)
+        return Response(
+            {"user": UserSerializer(user).data, "csrf_token": get_token(request._request)},
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class LoginView(APIView):

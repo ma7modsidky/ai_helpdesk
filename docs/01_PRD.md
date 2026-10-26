@@ -24,6 +24,11 @@ ResolveAI provides a shared ticket workspace with AI-assisted classification, kn
 - WhatsApp, social media, or telephony integrations.
 - Payments, subscription billing, and metered commercial billing.
 - Complex visual workflow builder.
+- Analytics dashboards, reporting exports, and trend visualisation: `GET .../analytics/overview/` is
+  removed from the MVP contract (ADR-025).
+- A customer self-service portal: customers are captured as contact details on a ticket, not as users
+  (ADR-020, ADR-025).
+- Team- or queue-based routing: teams are post-MVP and tickets have no `team_id` (ADR-024).
 - Multi-region deployment or Kubernetes.
 - Formal legal/compliance certification.
 - Storing payment-card data or sensitive medical data.
@@ -31,7 +36,7 @@ ResolveAI provides a shared ticket workspace with AI-assisted classification, kn
 ## 4. Personas
 
 ### Workspace owner/admin
-Creates a workspace, invites members, configures teams, roles, SLA policies, and approved knowledge sources.
+Creates a workspace, invites members, configures roles, SLA policies, and approved knowledge sources.
 
 ### Support manager
 Monitors ticket queues, workload, deadlines, escalations, and team performance.
@@ -75,15 +80,16 @@ Maintains service health and investigates failures; access to customer content m
 ## 6. Functional requirements
 
 ### Authentication and workspaces
-- FR-001: Users can authenticate using a supported secure authentication flow.
+- FR-001: Users can authenticate using a supported secure authentication flow. A new user can self-register with an email address and password; the account starts with no workspace and gains access only by creating one or accepting an invitation.
 - FR-002: A user can belong to multiple workspaces, with a role per membership.
 - FR-003: Workspace membership and role are checked on every protected operation.
 - FR-004: Workspace creation/invitation is controlled; never allow a client-supplied workspace ID alone to grant access.
-- FR-005: Workspace members can invite/remove members according to role policy.
+- FR-005: Workspace members can invite/remove members according to role policy. An invitation is single-use, expires after a fixed window, can be revoked or resent, grants at most `admin`, and is accepted only by an account with the invited email address.
+- FR-006: A workspace owner can transfer ownership to another active member in one atomic operation, and a workspace always retains at least one active owner.
 
 ### Tickets and conversations
 - FR-010: Authorized users can create and list tickets within their workspace.
-- FR-011: Tickets have subject, description, status, priority, category, requester, assignee, timestamps, and SLA timestamps where applicable.
+- FR-011: Tickets have subject, description, status, priority, category, requester, assignee, timestamps, and SLA timestamps where applicable. The requester is captured as an email (with an optional name) so a customer does not need an account; `requester_user_id` is set only when the requester is also a member (ADR-020).
 - FR-012: Agents can assign tickets and change status only through validated transitions.
 - FR-013: Messages are classified as customer-visible replies or internal notes.
 - FR-014: Customer-visible replies and internal notes are rendered distinctly and are never exposed across roles incorrectly.
@@ -121,6 +127,7 @@ Maintains service health and investigates failures; access to customer content m
 - FR-051: Logs include request/correlation IDs and task IDs where applicable, without secrets or unnecessary ticket contents.
 - FR-052: Errors are observable, actionable, and do not expose stack traces to clients.
 - FR-053: Demo seed data is fictional and contains no real personal information.
+- FR-054: Retention and deletion behavior for tickets, messages, audit events, AI results, and workspaces is documented and enforced by a scheduled management command.
 
 ## 7. Non-functional requirements
 

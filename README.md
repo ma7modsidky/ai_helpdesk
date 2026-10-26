@@ -49,7 +49,7 @@ ai-helpdesk/
 └── README.md
 ```
 
-## Local development (current status: T2.3 workspace endpoints)
+## Local development (current status: T2.6 registration, invitations, and workspace endpoints)
 
 Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), Docker with Compose.
 
@@ -79,8 +79,9 @@ uv run python manage.py runserver
   line carries a `request_id`. Each response echoes the ID in `X-Request-ID`: a client value is
   accepted only if it matches `[A-Za-z0-9._-]{1,64}`, otherwise one is generated. Log lines
   contain the method, path (never the query string), status, and duration — no bodies or headers.
-- API (T1.3): session authentication under `/api/v1/auth/` — `GET /auth/csrf/` for a token,
-  `POST /auth/login/` with JSON and `X-CSRFToken`, `POST /auth/logout/`, `GET /auth/me/`. The
+- API (T1.3, T2.5): session authentication under `/api/v1/auth/` — `GET /auth/csrf/` for a token,
+  `POST /auth/register/` for open sign-up (it creates the account, signs it in, and creates no
+  workspace), `POST /auth/login/` with JSON and `X-CSRFToken`, `POST /auth/logout/`, `GET /auth/me/`. The
   OpenAPI document is at `GET /api/v1/schema/`. Every state-changing request must send
   `Content-Type: application/json`; errors always return
   `{"error": {"code", "message", "request_id"}}`.
@@ -88,7 +89,14 @@ uv run python manage.py runserver
   (the caller becomes its owner); `GET /workspaces/{id}/members/` lists active members;
   `PATCH /workspaces/{id}/members/{membership_id}/` changes a role or revokes access. Checks are
   server-side: non-members see 404, insufficient roles see 403, and the last active owner cannot be
-  demoted or removed (409).
+  demoted or removed (409). `POST /workspaces/{id}/transfer-ownership/` hands ownership to an active
+  member and demotes the caller to admin in one transaction (T2.7).
+- Invitations (T2.6): `POST /workspaces/{id}/invitations/` (owner or admin) issues a single-use
+  invitation and returns `/invite/<token>` exactly once, alongside `GET` (list), `POST .../resend/`
+  (rotates the token) and `DELETE` (revoke). `POST /invitations/preview/` is public and
+  `POST /invitations/accept/` joins the signed-in account whose email matches the invitation. Tokens
+  are stored hashed, expire after seven days, and email is sent through the configured backend —
+  the console locally, locmem in tests.
 - Health checks: `GET /health/live/` reports the process is up (200). `GET /health/ready/`
   reports required dependency readiness (200, or 503 with `{"status": "unavailable"}` and no
   internal detail when PostgreSQL is unreachable).
@@ -112,7 +120,7 @@ against a PostgreSQL 16 service. CI uses throwaway credentials and no repository
 
 Tests run with branch coverage over `apps/` plus `config/env.py` and `config/urls.py`, excluding
 migrations, tests, settings modules, and the WSGI/ASGI entry points. The floor is 90% against a
-measured 97%, configured in `pyproject.toml`, and the `coverage.xml` report is uploaded as a
+measured 99%, configured in `pyproject.toml`, and the `coverage.xml` report is uploaded as a
 workflow artifact (diagnostic only — the failing gate is the test step's exit code).
 
 Supply-chain gates in the same job:

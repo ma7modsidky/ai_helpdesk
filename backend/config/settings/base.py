@@ -116,6 +116,10 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "apps.common.errors.exception_handler",
     "DEFAULT_THROTTLE_RATES": {
         "auth_login": "10/min",
+        # Open sign-up is limited harder than login: an account costs a row.
+        "auth_register": "10/hour",
+        "invitation_create": "30/hour",
+        "invitation_accept": "30/hour",
     },
 }
 
@@ -123,7 +127,8 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "ResolveAI Helpdesk API",
     "DESCRIPTION": (
         "Multi-tenant customer support API. All endpoints require an authenticated "
-        "session except the CSRF bootstrap and login endpoints. Errors always use "
+        "session except the CSRF bootstrap, registration, login, and the invitation "
+        "preview endpoints. Errors always use "
         '{"error": {"code", "message", "request_id"}}.'
     ),
     "VERSION": "v1",
@@ -131,6 +136,24 @@ SPECTACULAR_SETTINGS = {
     "SCHEMA_PATH_PREFIX": r"/api/v1",
     "COMPONENT_SPLIT_REQUEST": True,
 }
+
+
+# --- Email ----------------------------------------------------------------
+# Delivery is best effort; the invitation row is the source of truth. Development
+# prints messages to the console and tests use the locmem backend, so a clean
+# checkout needs no provider. Production supplies a real backend and credentials.
+
+EMAIL_BACKEND = env_str(
+    "DJANGO_EMAIL_BACKEND",
+    default="django.core.mail.backends.console.EmailBackend",
+)
+DEFAULT_FROM_EMAIL = env_str("DJANGO_DEFAULT_FROM_EMAIL", default="no-reply@resolveai.local")
+# A stalled SMTP connection must not hold a request open.
+EMAIL_TIMEOUT = 10
+
+# Used to build the accept link in invitation emails. The API returns the relative
+# ``accept_path`` instead, so no deployment-specific URL leaks into responses.
+FRONTEND_BASE_URL = env_str("FRONTEND_BASE_URL", default="http://localhost:5173")
 
 
 # --- Database -------------------------------------------------------------

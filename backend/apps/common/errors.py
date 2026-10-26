@@ -69,6 +69,14 @@ class Conflict(exceptions.APIException):
     default_code = "conflict"
 
 
+class InvitationExpiredError(exceptions.APIException):
+    """409 with a distinct code, so an expired invite is not confused with other conflicts."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_detail = "This invitation has expired."
+    default_code = "invitation_expired"
+
+
 def request_id_for(request: HttpRequest | None) -> str:
     """Return the correlation ID bound by the request middleware."""
     return getattr(request, "request_id", None) or REQUEST_ID_ABSENT
@@ -131,6 +139,10 @@ def _code_and_message(exc: Exception, status_code: int) -> tuple[str, str]:
         return "authentication_failed", str(exc.detail)
     if isinstance(exc, exceptions.Throttled):
         return "throttled", default_message
+    if isinstance(exc, InvitationExpiredError):
+        # A distinct code lets the invitee UI say "ask for a new invitation"
+        # instead of treating every conflict as a generic state clash.
+        return exc.default_code, str(exc.detail)
     if isinstance(exc, exceptions.PermissionDenied):
         # Generic on purpose: object-level denials must not describe the object.
         return "permission_denied", default_message

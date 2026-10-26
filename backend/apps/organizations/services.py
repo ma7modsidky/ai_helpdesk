@@ -25,6 +25,8 @@ from .exceptions import (
     InsufficientRole,
     LastOwnerRequired,
     MembershipNotFound,
+    OwnershipTargetNotActive,
+    OwnershipTransferToSelf,
     WorkspaceNotFound,
     WorkspaceSlugTaken,
 )
@@ -180,6 +182,61 @@ def create_workspace(*, name: str, slug: str, owner: User, timezone: str = "UTC"
     except IntegrityError as exc:
         raise WorkspaceSlugTaken from exc
     return workspace
+
+
+def transfer_ownership(
+    *, access: WorkspaceAccess, membership_id: UUID
+) -> tuple[Membership, Membership]:
+    """Hand the workspace to another active member in one transaction.
+
+    Returns ``(new_owner, previous_owner)``. The workspace row is locked first,
+    exactly as for membership changes (ADR-018), so a transfer cannot interleave
+    with a demotion, a revocation, or another transfer in the same workspace. The
+    actor's membership is re-read under that lock, so an owner who was demoted
+    while the request was in flight is refused rather than acting on stale
+    authority.
+
+    Both role writes happen inside the transaction, and the target is promoted
+    before the actor is demoted, so the workspace is never observably ownerless.
+    Ownership never travels through an invitation (ADR-026); this is the only
+    operation that confers it.
+    """
+    with transaction.atomic():
+        workspace = (
+            Workspace.objects.select_for_update()
+            .filter(pk=access.workspace.pk, status=WorkspaceStatus.ACTIVE)
+            .first()
+        )
+        if workspace is None:
+            raise WorkspaceNotFound
+
+        actor = Membership.objects.filter(
+            pk=access.membership.pk,
+            workspace=workspace,
+            status=MembershipStatus.ACTIVE,
+        ).first()
+        if actor is None:
+            raise WorkspaceNotFound
+
+        if membership_role(actor.role) is not MembershipRole.OWNER:
+            raise InsufficientRole(required=MembershipRole.OWNER)
+
+        target = Membership.objects.filter(workspace=workspace, pk=membership_id).first()
+        if target is None:
+            raise MembershipNotFound
+        if target.pk == actor.pk:
+            raise OwnershipTransferToSelf
+        if target.status != MembershipStatus.ACTIVE:
+            raise OwnershipTargetNotActive
+
+        # Promote first: the intermediate state has two owners, never zero.
+        if membership_role(target.role) is not MembershipRole.OWNER:
+            target.role = MembershipRole.OWNER.value
+            target.save(update_fields=["role"])
+        actor.role = MembershipRole.ADMIN.value
+        actor.save(update_fields=["role"])
+
+    return target, actor
 
 
 def change_membership(

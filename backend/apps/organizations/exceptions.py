@@ -60,3 +60,90 @@ class LastOwnerRequired(WorkspaceAccessError):
 
     def __init__(self) -> None:
         super().__init__("A workspace must keep at least one active owner.")
+
+
+class OwnershipTransferError(Exception):
+    """Base class for refusals to hand a workspace over.
+
+    Not a ``WorkspaceAccessError``: the caller is authorized, but the requested
+    change is not valid input or not valid for the target's state.
+    """
+
+
+class OwnershipTransferToSelf(OwnershipTransferError):
+    """The caller already owns the workspace, so there is nothing to hand over."""
+
+    def __init__(self) -> None:
+        super().__init__("You already own this workspace.")
+
+
+class OwnershipTargetNotActive(OwnershipTransferError):
+    """The target membership is removed, so it cannot become the owner."""
+
+    def __init__(self) -> None:
+        super().__init__("Only an active member can become the workspace owner.")
+
+
+class InvitationError(Exception):
+    """Base class for invitation lifecycle failures.
+
+    Deliberately not a ``WorkspaceAccessError``: an invitation is reached through
+    its own token, and these failures describe the state of that invitation rather
+    than a refusal to resolve a workspace.
+    """
+
+
+class InvitationNotFound(InvitationError):
+    """No invitation matches the token, or the workspace is no longer addressable."""
+
+    def __init__(self) -> None:
+        super().__init__("The requested invitation was not found.")
+
+
+class InvitationExpired(InvitationError):
+    """The invitation is still pending but past its expiry."""
+
+    def __init__(self) -> None:
+        super().__init__("This invitation has expired.")
+
+
+class InvitationNotPending(InvitationError):
+    """The invitation was already accepted, or was revoked."""
+
+    def __init__(self) -> None:
+        super().__init__("This invitation can no longer be used.")
+
+
+class InvitationAlreadyPending(InvitationError):
+    """A live invitation for this address already exists in the workspace."""
+
+    def __init__(self) -> None:
+        super().__init__("An invitation for this address is already pending.")
+
+
+class InvitationRoleNotAllowed(InvitationError):
+    """The requested role cannot be granted through an invitation."""
+
+    def __init__(self) -> None:
+        super().__init__("An invitation cannot grant the owner role.")
+
+
+class InvitationEmailTaken(InvitationError):
+    """The address already holds an active membership in the workspace."""
+
+    def __init__(self) -> None:
+        super().__init__("This address is already a member of this workspace.")
+
+
+class InvitationEmailMismatch(InvitationError):
+    """The signed-in account does not own the invited address."""
+
+    def __init__(self) -> None:
+        super().__init__("This invitation was addressed to a different account.")
+
+
+class MembershipRoleConflict(InvitationError):
+    """Accepting would silently change an existing active member's role."""
+
+    def __init__(self) -> None:
+        super().__init__("This account already has a different role in this workspace.")

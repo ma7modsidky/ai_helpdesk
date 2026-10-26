@@ -52,15 +52,33 @@ Use one task prompt per implementation slice. The coding agent must read `09_AGE
 **Security gate:** never permanently complete; re-run for every resource added in later phases.
 **Must read:** security spec, test strategy.
 
+## T2.5 — Self-registration
+**Goal:** Add `POST /api/v1/auth/register/` so a new user can create an account with an email and password, and land signed in with no workspace.
+**Acceptance:** public endpoint requiring a CSRF token; the address is stored lowercased and must be unique; Django's configured password validators are enforced and reported as `error.details.password`; a duplicate address is a 400 on `email`; success is 201 with the login response shape and an active session (`GET /auth/me/` returns the user); no workspace or membership is created; the throttle scope is enforced; tests use the client with CSRF enforcement on.
+**Out of scope:** email verification, password reset, invitation acceptance (T2.6), frontend screens.
+**Must read:** API contract, security spec, ADR-027.
+
+## T2.6 — Invitations and acceptance
+**Goal:** Implement the `Invitation` model and the contract's invitation endpoints — create, list, resend, revoke, invitee preview, and accept — with a hashed single-use token.
+**Acceptance:** the raw token is never stored, logged, or returned by a list or detail read; create returns `accept_path` exactly once and resend returns a fresh one; a partial unique constraint allows one pending invitation per address, so a second create is 409 while resend rotates the token and extends expiry; create rejects `owner`, an invalid email, and an address that is already an active member; only owner and admin may manage invitations (403 otherwise) and non-members get 404; revoke invalidates the token immediately; acceptance requires a signed-in account whose email matches (403 otherwise), is idempotent for the same caller, is 409 when expired or when an active membership holds a different role, and reactivates a removed membership with the invited role; archived workspaces are not addressable; a delivery failure leaves `delivery_status` failed while the invitation survives, and resend retries; both throttle scopes are enforced; tests use the locmem email backend and never call a provider.
+**Out of scope:** self-registration (T2.5), email verification, choosing an email provider, moving delivery to Celery (T5.1), frontend screens.
+**Must read:** API contract, domain model, security spec, ADR-026.
+
+## T2.7 — Atomic ownership transfer
+**Goal:** Add `POST /workspaces/{id}/transfer-ownership/` so an owner can hand the workspace to another active member in one transaction.
+**Acceptance:** owner-only (403 otherwise); the target becomes `owner` and the actor `admin` atomically, so an active owner always remains; self-transfer is 400; an inactive target is 409 and a foreign membership 404; two concurrent transfers cannot leave the workspace ownerless; cross-tenant negatives and the existing last-owner rule still pass.
+**Out of scope:** invitations, teams, a dedicated ownership-history table (the audit stream records the change once T3.5 lands).
+**Must read:** API contract, security spec, ADR-017, ADR-018, ADR-025.
+
 ## T3.1 — Ticket models
-**Goal:** Implement Ticket, TicketMessage, and audit/event models with indexes and constraints.
-**Acceptance:** valid relationships; public reply/internal note distinction; status/priority choices; model tests.
+**Goal:** Implement Ticket, TicketMessage, and audit/event models with indexes and constraints, using the requester contact snapshot and optimistic-concurrency `version` from ADR-020 and ADR-022, and no `team_id` (ADR-024).
+**Acceptance:** valid relationships; `requester_email` required and stored lowercased; `requester_user_id` accepted only for an active member of the same workspace; `version` defaults to 1 and does not change when a message is appended; public reply/internal note distinction; status/priority choices enforced by database constraints as well as choices; model tests for each rule.
 **Out of scope:** AI, frontend.
 
 ## T3.2 — Ticket API
-**Goal:** Implement list/create/detail and message endpoints per API contract.
-**Acceptance:** pagination, filtering, permission checks, validation, error envelope, cross-tenant tests.
-**Performance:** prevent N+1 queries using appropriate select_related/prefetch_related.
+**Goal:** Implement list/create/detail and message endpoints per API contract, including the `ordering` allowlist, the `assignee` values (`me`, `unassigned`, UUID), and `If-Match` field edits.
+**Acceptance:** the capability matrix in the contract is enforced per route (403); invalid filter or ordering values and out-of-allowlist `PATCH` fields are 400 with field details; a stale or missing `If-Match` is 409 reporting the current version; appending a message does not invalidate a held version; pagination is stable across ties; cross-tenant tests; error envelope.
+**Performance:** prevent N+1 queries using appropriate select_related/prefetch_related; verify the list query plan against the documented indexes.
 
 ## T5.1 — Celery/RabbitMQ
 **Goal:** Configure Celery with RabbitMQ broker, task autodiscovery, worker and Beat.

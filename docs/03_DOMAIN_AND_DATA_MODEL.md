@@ -11,30 +11,59 @@ Tenant boundary. Holds name, slug, timezone, settings, and lifecycle state.
 ### Membership
 `workspace`, `user`, `role`, `status`, `created_at`. Unique constraint on `(workspace, user)`. Roles: `owner`, `admin`, `manager`, `agent`. Customer access should be modeled separately if a portal is implemented.
 
-### Team
-`workspace`, `name`, `description`. Unique name per workspace where appropriate.
+### Team — deferred past MVP
+`workspace`, `name`, `description`. Unique name per workspace where appropriate. **Not part of the MVP
+schema** (ADR-024): tickets carry `assignee_id` and no `team_id`, and there is no team routing or queue.
+Recorded here so the concept is not lost; adding it later is one table plus a nullable `ticket.team_id`.
+
+### Invitation
+Issued by an owner or admin to grant a role in a workspace before the invitee has a membership (ADR-026).
+
+- `id` UUID
+- `workspace_id` (cascade)
+- `email` required, trimmed, lowercased, ≤254 characters
+- `role`: `admin`, `manager`, `agent` — never `owner`; ownership moves only through transfer (T2.7)
+- `invited_by_id` nullable FK to `User` (`SET_NULL`) — attribution survives the inviter leaving
+- `token_hash` required, unique — SHA-256 of a 32-byte `secrets.token_urlsafe` token; the raw token is never stored
+- `status`: `pending`, `accepted`, `revoked`
+- `expires_at` required — creation plus seven days
+- `accepted_at`, `accepted_by_id` nullable
+- `delivery_status`: `pending`, `sent`, `failed`; `last_sent_at` nullable
+- `created_at`, `updated_at`
+
+Constraints: partial unique on `(workspace_id, email)` where `status = 'pending'`, so one live invitation
+exists per address per workspace; unique `token_hash`; `CHECK` on `role` and on `status`; index on
+`(workspace_id, status)`.
+
+Expiry is derived, not stored: a `pending` row past `expires_at` is expired, so no job has to flip
+statuses. Reads report `expired`, and acceptance refuses it.
+
+No `Membership` row exists until acceptance. A pending invitation is not a member and appears in no
+member list or count, which keeps member queries and the last-owner rule unchanged.
 
 ### Ticket
 - `id` UUID
 - `workspace_id`
-- `requester_id`
-- `assignee_id` nullable
-- `team_id` nullable
+- `requester_email` required, stored lowercased; `requester_name` optional — the customer contact snapshot (ADR-020)
+- `requester_user_id` nullable — set only when the requester is also an active member of this workspace
+- `assignee_id` nullable — must be an active member of the same workspace
 - `subject`
 - `description`
 - `status`: `open`, `in_progress`, `waiting_on_customer`, `resolved`, `closed`
 - `priority`: `low`, `normal`, `high`, `urgent`
 - `category`
-- `first_response_due_at`
+- `first_response_due_at` nullable — populated once an SLA policy is applied in Phase 8
 - `first_responded_at` nullable
 - `resolved_at` nullable
 - `created_at`, `updated_at`
-- `version` integer for optimistic concurrency if needed
+- `version` integer, default 1 — optimistic concurrency for field edits (ADR-022)
+
+There is no `team_id`: teams are deferred past MVP (ADR-024).
 
 Indexes should be based on actual queries, likely `(workspace_id, status, updated_at)`, `(workspace_id, assignee_id, status)`, and deadline/status candidate queries. Confirm with query plans rather than adding every possible index.
 
 ### TicketMessage
-`ticket_id`, `author_id`, `body`, `visibility` (`public_reply`, `internal_note`), `created_at`. Public replies and internal notes must be filtered by server-side authorization, not just hidden in UI.
+`ticket_id`, `author_id`, `body`, `visibility` (`public_reply`, `internal_note`), `created_at`. Public replies and internal notes must be filtered by server-side authorization, not just hidden in UI. Every staff role that may comment may choose either visibility (ADR-021); the distinction is enforced when a surface reads messages, so a customer-facing reader filters to `public_reply` (no such endpoint exists in MVP). Rows are append-only: no edit or delete operation in MVP.
 
 ### TicketEvent / AuditEvent
 Append-only event record: `workspace_id`, `actor_id` nullable for system action, `object_type`, `object_id`, `event_type`, minimal structured metadata, `created_at`, `correlation_id`. Avoid storing full message bodies or secrets in metadata.
@@ -63,8 +92,9 @@ Track entity, workspace, job type, status, provider/model, attempts, started/com
 ## 2. Relationship sketch
 
 ```text
-User ──< Membership >── Workspace ──< Team
+User ──< Membership >── Workspace
                             │
+                            ├──< Invitation
                             ├──< Ticket ──< TicketMessage
                             │       ├──< TicketEvent
                             │       ├──< AIJob/AIResult
@@ -78,7 +108,13 @@ User ──< Membership >── Workspace ──< Team
 ## 3. Invariants
 
 - Every tenant-owned record has a workspace/tenant association directly or through a parent.
-- A ticket's requester/assignee/team must be valid for the same workspace according to the product's membership model.
+- A pending invitation is not a membership: it appears in no member list, count, or permission check; acceptance creates or reactivates the membership.
+- An invitation grants its role only when it is `pending`, unexpired, and accepted by an account whose email matches the invited address. Raw tokens are never stored or logged.
+- At most one pending invitation exists per `(workspace, email)`; resending rotates the token and extends `expires_at` rather than creating a second row.
+- Invitation roles never include `owner`; ownership changes only through transfer (T2.7).
+- A ticket's `assignee_id`, and its `requester_user_id` when set, must reference an active member of the same workspace. `requester_email` and `requester_name` are contact data for a customer who does not need an account (ADR-020).
+- Any active member of a workspace may read every ticket in it: visibility is workspace-wide, not assignee-scoped (ADR-021).
+- A ticket's `version` changes when a ticket field changes, not when a message is appended, so a reply never makes a pending field edit stale (ADR-022).
 - A user can only access a ticket if they have an authorized relationship to its workspace and role.
 - Ticket status transitions are validated in a domain service.
 - A public response can set `first_responded_at` only once and only if it qualifies under policy.

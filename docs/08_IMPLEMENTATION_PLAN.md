@@ -2,6 +2,10 @@
 
 Keep each task small enough for an agent to complete, test, and explain in one bounded change. Commit after each verified slice.
 
+`16_PHASE2_AUDIT.md` records which contract endpoints and domain entities currently have no task
+here, and the decisions that must be settled before the next phase starts. Check it before
+beginning a phase.
+
 ## Phase 0 — Repository and decisions
 - T0.1 Create repo, README, docs, `.editorconfig`, ignore files.
 - T0.2 Add Docker Compose for PostgreSQL, Redis, RabbitMQ, backend, frontend, worker, beat.
@@ -21,11 +25,16 @@ Keep each task small enough for an agent to complete, test, and explain in one b
 - T2.2 Workspace resolution and authorization services.
 - T2.3 Role/permission matrix and endpoint permissions.
 - T2.4 Cross-tenant negative tests for every tenant-owned resource.
-**Exit:** tenant isolation is proven by tests before ticket features are added.
+- T2.5 Self-registration: email and password sign-up that starts a session and creates no workspace (ADR-027).
+- T2.6 Invitations and acceptance: hashed single-use token, seven-day expiry, revoke/resend, invitee preview and accept (ADR-026).
+- T2.7 Atomic ownership transfer, owner only (FR-006).
+**Exit:** tenant isolation is proven by tests before ticket features are added, and a workspace can be
+populated and handed over through the API alone — invite and accept (T2.6), transfer (T2.7) — with no
+shell access.
 
 ## Phase 3 — Ticket workflow
-- T3.1 Ticket and TicketMessage models, migrations, constraints, indexes.
-- T3.2 Ticket creation/list/detail APIs and pagination/filtering.
+- T3.1 Ticket and TicketMessage models, migrations, constraints, indexes: requester contact snapshot and `version` (ADR-020, ADR-022), no `team_id` (ADR-024).
+- T3.2 Ticket creation/list/detail APIs with the contract's filters and `ordering` allowlist (ADR-023), `If-Match` field edits (ADR-022), and the message endpoints.
 - T3.3 Status transition and assignment services.
 - T3.4 Internal notes vs public replies.
 - T3.5 Audit events and API tests.
@@ -74,8 +83,9 @@ Keep each task small enough for an agent to complete, test, and explain in one b
 - T9.1 Query review, indexes, N+1 tests or query-count checks where valuable.
 - T9.2 Security headers, CORS/CSRF review, throttling, upload limits if uploads exist.
 - T9.3 Dependency, secret, SAST and container scans.
-- T9.4 Staging deployment, migrations, smoke tests, rollback instructions.
+- T9.4 Staging deployment, migrations, smoke tests, rollback instructions, and production email delivery for invitation links (provider credentials backend-only).
 - T9.5 Seeded demo data, screenshots, architecture diagram, demo script.
+- T9.6 Retention and deletion command implementing the documented policy (FR-054).
 **Exit:** CI green, staging demo reliable, documented known limitations.
 
 ## Scope rule

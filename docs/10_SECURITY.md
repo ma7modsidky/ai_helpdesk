@@ -25,8 +25,11 @@ This document is an engineering checklist, not a claim of certification or legal
 - Use a maintained authentication approach; do not implement password cryptography yourself.
 - Enforce role and object permissions on the server for every endpoint.
 - Scope queryset access by authorized workspace before object lookup.
-- Test cross-tenant access for tickets, messages, knowledge articles, AI results, notifications, analytics, and exports.
+- Test cross-tenant access for tickets, messages, knowledge articles, AI results, and notifications.
 - Protect invitations and workspace-owner transfer flows.
+- Registration is open and throttled per client, and passwords go through Django's configured validators. A duplicate address is reported as a field error, which confirms that an account exists; that is accepted for MVP because the endpoint is rate limited and sign-in itself cannot be enumerated.
+- Invitation tokens are random (32 bytes), single-use, stored only as a SHA-256 hash, carried in request bodies rather than URLs, and never returned by a list or detail endpoint.
+- Invitation acceptance requires a signed-in account whose email equals the invited address and grants at most `admin`; ownership never travels through an invite. Without account email verification (deferred, D-10) acceptance proves only that the invitee controls an account at that address, so invitations stay revocable and short-lived.
 - Revoke access promptly when membership is removed.
 
 ### Web security
@@ -67,9 +70,24 @@ This document is an engineering checklist, not a claim of certification or legal
 ### Audit and privacy
 - Audit role changes, ticket assignment/status changes, public replies, AI draft approval/sending, and escalations.
 - Keep audit metadata minimal and avoid secrets.
-- Define retention/deletion behavior and document it.
+- Retention and deletion are defined below (ADR-025) and enforced by a scheduled command (FR-054).
 - Use synthetic demo data.
 - Restrict access to production logs and backups.
+
+### Retention and deletion (MVP policy)
+Recorded in ADR-025, enforced by T9.6. These are MVP defaults and need review before any real customer
+data is stored.
+
+| Data | Retained |
+| --- | --- |
+| Tickets and messages | 24 months after the ticket's last update |
+| Audit events | 24 months |
+| AI job payloads and results | 90 days |
+| Archived workspaces | Purged 90 days after archival, by manual command |
+| Backups | 30 days |
+
+Deletion is irreversible, runs as a manual command with a `--dry-run` mode (no automatic purge in
+MVP), and logs counts only — never ticket content, message bodies, or requester contact details.
 
 ## Security tests
 - Cross-tenant object ID guessing returns no data.
