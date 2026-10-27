@@ -69,6 +69,9 @@ This document is an engineering checklist, not a claim of certification or legal
 
 ### Audit and privacy
 - Audit role changes, ticket assignment/status changes, public replies, AI draft approval/sending, and escalations.
+- Ticket creation, field edits, assignment, status changes and messages are recorded in `TicketEvent`
+  (ADR-029) as identifiers and field names only. Membership and invitation changes are not audited yet;
+  that gap is tracked for T9.2.
 - Keep audit metadata minimal and avoid secrets.
 - Retention and deletion are defined below (ADR-025) and enforced by a scheduled command (FR-054).
 - Use synthetic demo data.

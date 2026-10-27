@@ -11,7 +11,7 @@ from apps.organizations.permissions import (
     HasWorkspaceCapability,
     workspace_access_for,
 )
-from apps.organizations.services import Capability, has_capability
+from apps.organizations.services import Capability, has_capability, minimum_role_for
 from apps.organizations.tests.factories import MembershipFactory
 
 pytestmark = pytest.mark.django_db
@@ -34,6 +34,50 @@ def test_capability_matrix(role: str, capability: Capability, allowed: bool) -> 
     membership = MembershipFactory.build(role=role)
 
     assert has_capability(membership, capability) is allowed
+
+
+TICKET_CAPABILITIES = frozenset(
+    {
+        Capability.TICKETS_VIEW,
+        Capability.TICKETS_CREATE,
+        Capability.TICKETS_EDIT,
+        Capability.TICKETS_COMMENT,
+        Capability.TICKETS_ASSIGN_SELF,
+        Capability.TICKETS_ASSIGN_OTHERS,
+        Capability.TICKETS_TRANSITION,
+    }
+)
+
+
+@pytest.mark.parametrize("role", list(MembershipRole))
+def test_every_role_holds_the_ticket_capabilities_except_reassigning_others(
+    role: MembershipRole,
+) -> None:
+    membership = MembershipFactory.build(role=role)
+    expected = TICKET_CAPABILITIES - (
+        {Capability.TICKETS_ASSIGN_OTHERS} if role is MembershipRole.AGENT else set()
+    )
+
+    granted = {
+        capability for capability in TICKET_CAPABILITIES if has_capability(membership, capability)
+    }
+
+    assert granted == expected
+
+
+@pytest.mark.parametrize(
+    ("capability", "minimum"),
+    [
+        (Capability.TICKETS_VIEW, MembershipRole.AGENT),
+        (Capability.TICKETS_TRANSITION, MembershipRole.AGENT),
+        (Capability.TICKETS_ASSIGN_OTHERS, MembershipRole.MANAGER),
+        (Capability.MEMBERS_MANAGE, MembershipRole.ADMIN),
+    ],
+)
+def test_the_minimum_role_names_the_floor_of_a_capability(
+    capability: Capability, minimum: MembershipRole
+) -> None:
+    assert minimum_role_for(capability) is minimum
 
 
 def test_an_unknown_stored_role_grants_nothing() -> None:

@@ -63,10 +63,22 @@ There is no `team_id`: teams are deferred past MVP (ADR-024).
 Indexes should be based on actual queries, likely `(workspace_id, status, updated_at)`, `(workspace_id, assignee_id, status)`, and deadline/status candidate queries. Confirm with query plans rather than adding every possible index.
 
 ### TicketMessage
-`ticket_id`, `author_id`, `body`, `visibility` (`public_reply`, `internal_note`), `created_at`. Public replies and internal notes must be filtered by server-side authorization, not just hidden in UI. Every staff role that may comment may choose either visibility (ADR-021); the distinction is enforced when a surface reads messages, so a customer-facing reader filters to `public_reply` (no such endpoint exists in MVP). Rows are append-only: no edit or delete operation in MVP.
+`ticket_id`, `author_id`, `body`, `visibility` (`public_reply`, `internal_note`), `created_at`. Public replies and internal notes must be filtered by server-side authorization, not just hidden in UI. Every staff role that may comment may choose either visibility (ADR-021); the distinction is enforced when a surface reads messages, so a customer-facing reader filters to `public_reply` (no such endpoint exists in MVP). Rows are append-only: no edit or delete operation in MVP. Appending a message moves the ticket's `updated_at` and leaves its `version` untouched, so a reply never invalidates a field edit someone is composing (ADR-022).
 
 ### TicketEvent / AuditEvent
-Append-only event record: `workspace_id`, `actor_id` nullable for system action, `object_type`, `object_id`, `event_type`, minimal structured metadata, `created_at`, `correlation_id`. Avoid storing full message bodies or secrets in metadata.
+Append-only event record: `workspace_id`, `actor_id` nullable for system action, `object_type`,
+`object_id`, `event_type`, minimal structured metadata, `created_at`, `correlation_id`.
+
+`event_type` is one of `ticket.created`, `ticket.updated`, `ticket.assigned`, `ticket.unassigned`,
+`ticket.status_changed`, `ticket.message_added`. Metadata names what changed — the edited field
+names, the previous and new assignee ids, the previous and new status, or the message id and its
+visibility — and never copies a message body, requester address, or name. `correlation_id` is the
+request id from the access log, so an audit row can be matched to the request that produced it.
+
+Rows are written only by the ticket services, in the same transaction as the change they describe,
+and no endpoint updates or deletes one. Indexes: `(workspace_id, created_at)` for workspace history
+and `(object_type, object_id, created_at)` for one object's trail. Audit events are retained for 24
+months (ADR-025).
 
 ### SLAPolicy
 `workspace_id`, `name`, `priority`, `first_response_minutes`, `is_active`, policy/version timestamps. MVP uses elapsed minutes unless business-hours support is explicitly implemented.

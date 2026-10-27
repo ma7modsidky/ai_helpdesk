@@ -126,16 +126,62 @@ class Capability(StrEnum):
 
     MEMBERS_VIEW = "members.view"
     MEMBERS_MANAGE = "members.manage"
+    TICKETS_VIEW = "tickets.view"
+    TICKETS_CREATE = "tickets.create"
+    TICKETS_EDIT = "tickets.edit"
+    TICKETS_COMMENT = "tickets.comment"
+    TICKETS_ASSIGN_SELF = "tickets.assign_self"
+    TICKETS_ASSIGN_OTHERS = "tickets.assign_others"
+    TICKETS_TRANSITION = "tickets.transition"
 
 
-# Managers are deliberately not given member management: changing roles is an
-# administrative act, and the MVP has no manager-specific workflow that needs it.
+_MEMBER_CAPABILITIES = frozenset({Capability.MEMBERS_VIEW, Capability.MEMBERS_MANAGE})
+
+# Every ticket capability but one is held by all four roles; only reassigning work
+# to someone else is managerial (ADR-021). Member management is separate: managers
+# deliberately do not get it, because changing roles is an administrative act and
+# no manager workflow needs it.
+_TICKET_CAPABILITIES = frozenset(
+    {
+        Capability.TICKETS_VIEW,
+        Capability.TICKETS_CREATE,
+        Capability.TICKETS_EDIT,
+        Capability.TICKETS_COMMENT,
+        Capability.TICKETS_ASSIGN_SELF,
+        Capability.TICKETS_ASSIGN_OTHERS,
+        Capability.TICKETS_TRANSITION,
+    }
+)
+_AGENT_TICKET_CAPABILITIES = _TICKET_CAPABILITIES - {Capability.TICKETS_ASSIGN_OTHERS}
+_SELF_SERVICE = frozenset({Capability.MEMBERS_VIEW})
+
 _ROLE_CAPABILITIES: dict[MembershipRole, frozenset[Capability]] = {
-    MembershipRole.OWNER: frozenset({Capability.MEMBERS_VIEW, Capability.MEMBERS_MANAGE}),
-    MembershipRole.ADMIN: frozenset({Capability.MEMBERS_VIEW, Capability.MEMBERS_MANAGE}),
-    MembershipRole.MANAGER: frozenset({Capability.MEMBERS_VIEW}),
-    MembershipRole.AGENT: frozenset({Capability.MEMBERS_VIEW}),
+    MembershipRole.OWNER: _MEMBER_CAPABILITIES | _TICKET_CAPABILITIES,
+    MembershipRole.ADMIN: _MEMBER_CAPABILITIES | _TICKET_CAPABILITIES,
+    MembershipRole.MANAGER: _SELF_SERVICE | _TICKET_CAPABILITIES,
+    MembershipRole.AGENT: _SELF_SERVICE | _AGENT_TICKET_CAPABILITIES,
 }
+
+# Lowest privilege first, so the first role holding a capability is its floor.
+_ROLES_BY_RANK: tuple[MembershipRole, ...] = (
+    MembershipRole.AGENT,
+    MembershipRole.MANAGER,
+    MembershipRole.ADMIN,
+    MembershipRole.OWNER,
+)
+
+
+def minimum_role_for(capability: Capability) -> MembershipRole:
+    """The least privileged role that holds ``capability``.
+
+    Used only to name a required role in an error; the decision itself is
+    :func:`has_capability`. A capability held by no role is a programming error,
+    so it raises rather than reporting an impossible requirement.
+    """
+    for role in _ROLES_BY_RANK:
+        if capability in _ROLE_CAPABILITIES[role]:
+            return role
+    raise ValueError(f"No role holds the capability {capability!r}.")
 
 
 def has_capability(membership: Membership, capability: Capability) -> bool:
@@ -149,9 +195,7 @@ def require_capability(
     """Resolve access and require a capability, for endpoint authorization."""
     access = resolve_workspace_access(user=user, workspace_id=workspace_id)
     if not has_capability(access.membership, capability):
-        # Member management is the only capability with a floor, so this names
-        # the role that could have performed the action.
-        raise InsufficientRole(required=MembershipRole.ADMIN)
+        raise InsufficientRole(required=minimum_role_for(capability))
     return access
 
 

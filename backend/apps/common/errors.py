@@ -77,6 +77,21 @@ class InvitationExpiredError(exceptions.APIException):
     default_code = "invitation_expired"
 
 
+class VersionConflict(Conflict):
+    """409 for a stale optimistic-concurrency check.
+
+    Carries the version the caller should reload, so the client can reapply its
+    edit without a second request. It is exposed through ``error.details`` like a
+    field error, but without pretending the request body was malformed.
+    """
+
+    default_detail = "The object changed since it was read."
+
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(self.default_detail)
+        self.error_details: dict[str, int] = {"version": current_version}
+
+
 def request_id_for(request: HttpRequest | None) -> str:
     """Return the correlation ID bound by the request middleware."""
     return getattr(request, "request_id", None) or REQUEST_ID_ABSENT
@@ -158,9 +173,11 @@ def exception_handler(exc: Exception, context: dict[str, Any]) -> Any:
         # the request middleware logs the traceback. Never expose it to the client.
         return None
 
-    details = None
     if isinstance(exc, exceptions.ValidationError):
-        details = _as_json_safe(exc.detail)
+        details: Any | None = _as_json_safe(exc.detail)
+    else:
+        # A conflict may name the value to reload; anything else stays detail-free.
+        details = getattr(exc, "error_details", None)
 
     code, message = _code_and_message(exc, response.status_code)
     response.data = build_error(

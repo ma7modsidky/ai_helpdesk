@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "apps.accounts",
     "apps.organizations",
+    "apps.tickets",
 ]
 
 MIDDLEWARE = [
@@ -120,6 +121,9 @@ REST_FRAMEWORK = {
         "auth_register": "10/hour",
         "invitation_create": "30/hour",
         "invitation_accept": "30/hour",
+        # Ticket creation is the only ticket route that adds rows on demand, so
+        # it is the only one that needs a client-level ceiling.
+        "ticket_create": "120/hour",
     },
 }
 

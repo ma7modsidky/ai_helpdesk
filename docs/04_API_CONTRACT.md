@@ -119,10 +119,14 @@ table. A missing capability is `403`; a workspace the caller cannot see is `404`
 |---|---|---|---|---|---|
 | `tickets.view` | yes | yes | yes | yes | list and read any ticket in the workspace |
 | `tickets.create` | yes | yes | yes | yes | create a ticket |
+| `tickets.edit` | yes | yes | yes | yes | edit a ticket's fields with `If-Match` |
 | `tickets.comment` | yes | yes | yes | yes | post a public reply or an internal note |
 | `tickets.assign_self` | yes | yes | yes | yes | assign to the caller, or release the caller's own assignment |
 | `tickets.assign_others` | yes | yes | yes | no | assign to, or unassign, anyone else |
 | `tickets.transition` | yes | yes | yes | yes | change status through an allowed transition |
+
+`tickets.edit` was added in Phase 3 to name what `PATCH` actually does (ADR-029); it is held by all
+four roles, exactly like create and comment.
 
 Visibility is workspace-wide: any active member reads any ticket (ADR-021). There is no
 assignee-scoped visibility and no customer-facing ticket surface in MVP.
@@ -321,16 +325,30 @@ Request:
 }
 ```
 
-Response should confirm persistence immediately and return the AI job state without waiting for the LLM:
+Response, `201 Created`, is the full ticket representation from above:
 ```json
 {
   "id": "uuid",
   "subject": "Duplicate subscription charge",
+  "description": "I see two charges for my monthly subscription.",
   "status": "open",
   "priority": "normal",
-  "ai_status": "pending",
-  "created_at": "2026-01-01T12:00:00Z"
+  "category": "",
+  "requester_email": "customer@example.com",
+  "requester_name": "",
+  "requester_user_id": null,
+  "assignee_id": null,
+  "version": 1,
+  "first_response_due_at": null,
+  "first_responded_at": null,
+  "resolved_at": null,
+  "created_at": "2026-01-01T12:00:00Z",
+  "updated_at": "2026-01-01T12:00:00Z"
 }
+```
+
+`ai_status` appears only once AI jobs exist (T6.2); the ticket representation does not gain the field
+before then, so a client written against Phase 3 does not see a column that is always pending.
 ```
 
 ## AI draft contract

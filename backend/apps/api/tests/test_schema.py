@@ -15,6 +15,11 @@ EXPECTED_PATHS = {
     "/api/v1/auth/login/",
     "/api/v1/auth/logout/",
     "/api/v1/auth/me/",
+    "/api/v1/workspaces/{workspace_id}/tickets/",
+    "/api/v1/workspaces/{workspace_id}/tickets/{ticket_id}/",
+    "/api/v1/workspaces/{workspace_id}/tickets/{ticket_id}/assign/",
+    "/api/v1/workspaces/{workspace_id}/tickets/{ticket_id}/transition/",
+    "/api/v1/workspaces/{workspace_id}/tickets/{ticket_id}/messages/",
 }
 
 

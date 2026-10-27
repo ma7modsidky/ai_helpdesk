@@ -49,7 +49,7 @@ ai-helpdesk/
 └── README.md
 ```
 
-## Local development (current status: T2.6 registration, invitations, and workspace endpoints)
+## Local development (current status: T3.1–T3.5 ticket workflow, no AI yet)
 
 Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), Docker with Compose.
 
@@ -97,6 +97,14 @@ uv run python manage.py runserver
   `POST /invitations/accept/` joins the signed-in account whose email matches the invitation. Tokens
   are stored hashed, expire after seven days, and email is sent through the configured backend —
   the console locally, locmem in tests.
+- Tickets (T3.1–T3.5): `GET/POST /api/v1/workspaces/{id}/tickets/` lists (filters `status`,
+  `priority`, `assignee=me|unassigned|<uuid>`, `search`, allowlisted `ordering`, paginated) or creates
+  a ticket. `GET`/`PATCH .../tickets/{ticket_id}/` read one ticket or edit its fields, the latter
+  requiring `If-Match: "<version>"` and returning `409` with `error.details.version` when the version
+  is stale. `POST .../assign/`, `POST .../transition/` and `GET`/`POST .../messages/` cover assignment,
+  validated status transitions (agents may resolve, managers and above may reopen, `closed` is
+  terminal), and public replies versus internal notes. Every write appends a `TicketEvent` audit row;
+  creation is throttled at 120 per hour per client.
 - Health checks: `GET /health/live/` reports the process is up (200). `GET /health/ready/`
   reports required dependency readiness (200, or 503 with `{"status": "unavailable"}` and no
   internal detail when PostgreSQL is unreachable).
@@ -120,7 +128,7 @@ against a PostgreSQL 16 service. CI uses throwaway credentials and no repository
 
 Tests run with branch coverage over `apps/` plus `config/env.py` and `config/urls.py`, excluding
 migrations, tests, settings modules, and the WSGI/ASGI entry points. The floor is 90% against a
-measured 99%, configured in `pyproject.toml`, and the `coverage.xml` report is uploaded as a
+measured 98%, configured in `pyproject.toml`, and the `coverage.xml` report is uploaded as a
 workflow artifact (diagnostic only — the failing gate is the test step's exit code).
 
 Supply-chain gates in the same job:
