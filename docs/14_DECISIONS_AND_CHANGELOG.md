@@ -478,6 +478,15 @@ Record material decisions using this template.
 ## Changelog
 Add dated entries as features or specs change. Keep this file concise; detailed implementation notes belong in pull requests.
 
+- 2026-10-31: Classification suggestion beside the draft, with an accept action. Added
+  `ClassificationSummary` to the AI panel: category, sentiment, suggested priority, and the
+  rationale, with pending and unavailable states. Applying it is one `PATCH` of `category` and
+  `priority` under the version the screen read, so a stale read takes the existing 409 reload
+  prompt rather than overwriting a newer edit; the button is gated on `tickets.edit` and
+  disabled once the ticket already carries the suggestion. Sentiment is shown as context only,
+  because no ticket field stores it. The status poll now also runs while a classification is
+  pending or running. Catalog keys in both locales; covered in the detail screen's axe test.
+
 - 2026-10-31: AI panel on the ticket detail screen. Added `TicketAIPanel` with
   generate/regenerate, queued, running, failed, and ready states, bounded polling (4s, 60 polls,
   stopping on a terminal state), the draft in an editable field keyed by job id so a new job

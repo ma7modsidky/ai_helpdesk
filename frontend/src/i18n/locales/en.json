@@ -217,6 +217,20 @@
       },
       "ai": {
         "title": "AI reply draft",
+        "classificationTitle": "Classification suggestion",
+        "classifying": "Classifying this ticket…",
+        "classificationUnavailable": "No classification is available for this version.",
+        "suggestedCategory": "Category",
+        "sentimentLabel": "Sentiment",
+        "sentiment": {
+          "positive": "Positive",
+          "neutral": "Neutral",
+          "negative": "Negative"
+        },
+        "rationale": "Why: {{rationale}}",
+        "accept": "Apply suggestion",
+        "applied": "Applied",
+        "acceptHint": "Sets the ticket's category and priority.",
         "intro": "The assistant can draft a reply. It is a suggestion: review and edit it before you send it, and nothing is sent until you do.",
         "generate": "Generate draft",
         "regenerate": "Generate another",

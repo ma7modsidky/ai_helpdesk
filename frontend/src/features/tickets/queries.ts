@@ -120,8 +120,16 @@ export function useTicketAIStatus(workspaceId: string, ticketId: string) {
     queryFn: ({ signal }) => getAIStatus(workspaceId, ticketId, signal),
     enabled: workspaceId.length > 0 && ticketId.length > 0,
     refetchInterval: (current) => {
-      const status = current.state.data?.draft?.status;
-      if (status !== 'pending' && status !== 'running') {
+      // Either half can be in flight: classification is queued by ticket creation, a draft by
+      // a person, so the same read keeps both fresh and stops when both are terminal.
+      const draftStatus = current.state.data?.draft?.status;
+      const classificationStatus = current.state.data?.classification?.status;
+      const active =
+        draftStatus === 'pending' ||
+        draftStatus === 'running' ||
+        classificationStatus === 'pending' ||
+        classificationStatus === 'running';
+      if (!active) {
         return false;
       }
       if (polls.current >= AI_MAX_POLLS) {

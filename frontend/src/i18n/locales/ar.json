@@ -221,6 +221,20 @@
       },
       "ai": {
         "title": "مسودة رد بالذكاء الاصطناعي",
+        "classificationTitle": "اقتراح التصنيف",
+        "classifying": "جارٍ تصنيف هذه التذكرة…",
+        "classificationUnavailable": "لا يتوفر تصنيف لهذه النسخة.",
+        "suggestedCategory": "التصنيف",
+        "sentimentLabel": "المشاعر",
+        "sentiment": {
+          "positive": "إيجابية",
+          "neutral": "محايدة",
+          "negative": "سلبية"
+        },
+        "rationale": "السبب: {{rationale}}",
+        "accept": "تطبيق الاقتراح",
+        "applied": "مُطبَّق",
+        "acceptHint": "يضبط تصنيف التذكرة وأولويتها.",
         "intro": "يمكن للمساعد صياغة مسودة رد. إنها اقتراح: راجعها وحرّرها قبل إرسالها، ولن يُرسل أي شيء حتى تفعل ذلك.",
         "generate": "إنشاء مسودة",
         "regenerate": "إنشاء مسودة أخرى",

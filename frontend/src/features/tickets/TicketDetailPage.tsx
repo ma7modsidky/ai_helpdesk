@@ -24,6 +24,7 @@ import { useSession } from '@/features/auth/useSession';
 import { DEFAULT_WORKSPACE_SEGMENT, workspacePath } from '@/app/navigation';
 
 import { TicketAIPanel } from './TicketAIPanel';
+import type { TicketFieldEdit } from './api';
 import { TicketPriorityChip, TicketStatusChip } from './TicketChips';
 import { TicketComposer } from './TicketComposer';
 import { TicketTimeline } from './TicketTimeline';
@@ -103,7 +104,7 @@ export function TicketDetailPage() {
     activeMembers.find((entry) => entry.user_id === data.assignee_id)?.email ??
     t('tickets.inbox.filters.unassigned');
 
-  const editField = (edit: { priority?: TicketPriority }) => {
+  const editField = (edit: TicketFieldEdit) => {
     setRefusal(null);
     setConflict(false);
     updateFields.mutate(
@@ -305,6 +306,10 @@ export function TicketDetailPage() {
         workspaceId={workspaceId}
         ticketId={ticketId}
         canComment={can(role, 'tickets.comment')}
+        canEdit={canEdit}
+        currentCategory={data.category}
+        currentPriority={data.priority}
+        onAcceptSuggestion={editField}
       />
 
       <TicketComposer workspaceId={workspaceId} ticketId={ticketId} />

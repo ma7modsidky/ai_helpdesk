@@ -78,6 +78,18 @@ const INTERNAL_NOTE = {
   created_at: '2026-01-02T11:30:00Z',
 };
 
+const CLASSIFICATION = {
+  status: 'succeeded',
+  category: 'billing',
+  sentiment: 'negative',
+  suggested_priority: 'high',
+  confidence: 0.82,
+  rationale: 'Customer reports a duplicate charge and previous unanswered contacts.',
+  provider: 'fake',
+  model: 'fake-model-v1',
+  created_at: '2026-01-02T09:00:00Z',
+};
+
 const DRAFT_WITH_SOURCE = {
   id: 'd1',
   status: 'succeeded',
@@ -361,6 +373,49 @@ describe('TicketDetailPage AI panel', () => {
     // The text is cleared once it has become a reply, so it cannot be sent twice by accident.
     expect(editor).toHaveValue('');
     await expectNoAxeViolations();
+  });
+
+  it('shows the classification suggestion and applies it to the ticket', async () => {
+    mockTicket({
+      ai: { classification: CLASSIFICATION, draft: null },
+      onWrite: (path, method) => {
+        expect(method).toBe('PATCH');
+        expect(path).toBe('/workspaces/w1/tickets/t1/');
+        return { ...TICKET, category: 'billing', priority: 'high', version: 2 };
+      },
+    });
+
+    renderDetail();
+
+    expect(await screen.findByText(/customer reports a duplicate charge/i)).toBeInTheDocument();
+    expect(screen.getByText('Category: billing')).toBeInTheDocument();
+    expect(screen.getByText('Sentiment: Negative')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Apply suggestion' }));
+
+    await waitFor(() => {
+      expect(mockedRequest).toHaveBeenCalledWith(
+        '/workspaces/w1/tickets/t1/',
+        expect.objectContaining({
+          method: 'PATCH',
+          // The suggestion becomes a normal field edit under the version the screen read.
+          body: { category: 'billing', priority: 'high' },
+          ifMatch: 1,
+        }),
+      );
+    });
+    // Applied once: the button says so and cannot rewrite the same values.
+    expect(await screen.findByRole('button', { name: 'Applied' })).toBeDisabled();
+  });
+
+  it('shows the suggestion without offering to apply it when the role cannot edit', async () => {
+    // Signed in, but with no membership row here: there is no role to edit with.
+    mockTicket({ user: OWNER, members: [AGENT_ROW], ai: { classification: CLASSIFICATION } });
+
+    renderDetail();
+
+    expect(await screen.findByText(/customer reports a duplicate charge/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Apply suggestion' })).toBeDisabled();
   });
 
   it('warns when the draft rests on no knowledge article', async () => {

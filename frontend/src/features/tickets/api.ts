@@ -228,11 +228,15 @@ export interface ReplyDraft {
   readonly created_at: string;
 }
 
-/** The classification half of the status read; the panel shows the draft only. */
+/** The allowlisted sentiments a classification may report (05 §2). */
+export const AI_SENTIMENTS = ['positive', 'neutral', 'negative'] as const;
+export type AISentiment = (typeof AI_SENTIMENTS)[number];
+
+/** The classification half of the status read. */
 export interface AIClassification {
   readonly status: AIJobStatus;
   readonly category: string;
-  readonly sentiment: string;
+  readonly sentiment: AISentiment;
   readonly suggested_priority: TicketPriority;
   readonly confidence: number | null;
   readonly rationale: string;
