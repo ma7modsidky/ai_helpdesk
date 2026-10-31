@@ -276,6 +276,53 @@ Record material decisions using this template.
 - **Consequences:** Every new screen after T4.12 must land with both catalogs, its direction-matrix coverage and its axe assertion, or the gates stop covering it — which is why `08_IMPLEMENTATION_PLAN.md` states that rule for T6.4, T7.6 and T8.5. A third locale becomes a catalog plus a direction entry rather than a refactor. Contrast has to be reviewed twice, in both themes. The Arabic copy in these catalogs is authored during implementation and must be reviewed by a native speaker before any demo or public deployment; it is not machine-translated at runtime. `latn` numerals are a product decision that a future locale may revisit. Emails remain English. Because the locale is client-only, two devices can show the same account in different languages, which is intentional.
 - **Verification:** a catalog-parity test over `en`/`ar`; a direction-matrix test rendering each screen component in both directions; axe assertions in both directions; formatter tests for `Intl` output and `latn` numerals; T4.12 runs the end-to-end journey once per direction and asserts `dir="rtl"` and that no catalog key leaks as a raw identifier; T9.5 records screenshots in both locales and both themes.
 
+### ADR-035: A strict classification schema, and a job row per ticket version
+- **Status:** accepted
+- **Date:** 2026-10-31
+- **Context:** T6.2 is the first place untrusted model output would touch stored data. Three
+  questions had to be answered before writing it: what a classification is allowed to say, where
+  its status lives, and what happens when a ticket is edited while the work is queued. ADR-033
+  already put task state in the database with a text key; a classification needs typed fields and a
+  ticket relationship that the API's status endpoint can read in one query.
+- **Decision:** `apps/ai_assistant/schemas.py` owns the output contract: exactly five keys, an
+  allowlisted sentiment, a `suggested_priority` drawn from `TicketPriority`, a confidence in
+  `[0, 1]` that rejects `NaN`, `Infinity`, and booleans, and a rationale bounded to one short
+  sentence. Unknown keys are refused rather than ignored, because they mean the model answered a
+  different question. `category` is checked by shape, not by allowlist: workspaces name their own
+  categories (`Ticket.category` is free text), while the enum the system owns stays pinned. Jobs
+  live in `TicketClassification`, unique on `(ticket, ticket_version)`, holding status, attempts,
+  provenance, and the validated fields; the workspace is copied from the ticket so no caller can
+  file a job under another tenant. A prompt edit carries `CLASSIFICATION_PROMPT_VERSION` with every
+  result. The row is per version, so an edit queues a new job and the old answer keeps referring to
+  the text it described; a worker that reaches superseded text finishes the job without calling the
+  model. Dispatch is `get_or_create` plus `enqueue`, so a retried request, a redelivered message, and
+  two workers racing converge on one execution; a claim moves the row only from `pending` or
+  `failed`.
+- **Alternatives:** Reusing `TaskRecord.result` for the typed fields was rejected: the API's status
+  endpoint would have to find the row by a `LIKE` over a text key, and nothing would stop two
+  differently-shaped results from sharing a column. Storing the raw model text and validating at
+  read time was rejected: an invalid row would then be indistinguishable from a valid one whose
+  fields happened to be empty. Allowing an arbitrary `category` string was rejected because a model
+  can then emit a sentence, which no filter or report can use. Applying the suggestion to
+  `Ticket.category` automatically was rejected on ADR-002's principle: AI output is untrusted, and a
+  human decides what a ticket says. Keeping one job per ticket (overwritten on edit) was rejected
+  because the UI could then show a suggestion for text nobody is reading.
+- **Consequences:** A classification is a suggestion, never a write path: nothing here changes a
+  ticket, so the API's AI panel can present it for approval without a second review mechanism. Each
+  edit costs one more provider call, which is the price of never displaying a stale answer. Because
+  the row is keyed by version, reclassifying the same version is impossible by design; a manual
+  retry re-runs a `failed` row. AI work is not visible to the `task_status` command, which counts
+  `TaskRecord` rows — the operator view for these jobs is the workspace/status index, and closing
+  that gap is the honest cost of typed results.
+- **Verification:** `test_schemas.py` covers every rejection path (unparseable, wrong shape, unknown
+  key, invented enum, out-of-range and non-finite confidence, long rationale) and asserts a refusal
+  never quotes the response; `test_prompts.py` asserts the text is bounded, that ticket text cannot
+  close its data block, and that the instructions name it as data; `test_classification.py` asserts
+  the validated answer is stored with provenance, one job per version, that an edit produces a new
+  job, that a duplicate delivery is skipped, that superseded work never calls the model, that
+  invalid output is recorded without a retry while a timeout is left for retry, that another
+  tenant's ticket is refused, and that a ticket is still created when the queue is unavailable.
+
 ### ADR-034: One provider adapter, fake first
 - **Status:** accepted
 - **Date:** 2026-10-31
@@ -386,6 +433,16 @@ Record material decisions using this template.
 
 ## Changelog
 Add dated entries as features or specs change. Keep this file concise; detailed implementation notes belong in pull requests.
+
+- 2026-10-31: T6.2 AI classification, the first untrusted output to reach stored data. Added
+  `apps/ai_assistant/schemas.py` (strict five-key contract, allowlisted sentiment, priority drawn
+  from `TicketPriority`, confidence bounded and finite, bounded rationale), `prompts.py` (versioned
+  `classify-v1` prompt, bounded input, requester identity withheld, ticket text fenced so it cannot
+  close its block), `models.TicketClassification` (unique on `(ticket, ticket_version)`, status,
+  attempts, provenance, validated fields), `runner.py` (conditional claim, success, class-only
+  failure, supersede), and `tasks.classify_ticket` with `request_classification` (once per version,
+  published after commit). Ticket creation queues the job and never fails with it. Recorded ADR-035.
+  625 tests, 98.01% branch coverage.
 
 - 2026-10-31: T6.1 AI provider adapter and deterministic fake, the start of Phase 6. Added
   `apps/ai_assistant` with `providers.py`: the `AIProvider` protocol (`complete(CompletionRequest) ->

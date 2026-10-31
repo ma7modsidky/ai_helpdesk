@@ -18,6 +18,7 @@ something the security spec allows (``10_SECURITY.md``).
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -57,6 +58,8 @@ from .models import (
     TicketStatus,
     normalize_email,
 )
+
+logger = logging.getLogger(__name__)
 
 # Fields a client may change with an If-Match edit. Status and assignment are
 # deliberately absent: each has its own command, so field edits never have to
@@ -201,7 +204,28 @@ def create_ticket(
             correlation_id=correlation_id,
         )
 
+    _request_classification(ticket)
     return ticket
+
+
+def _request_classification(ticket: Ticket) -> None:
+    """Ask for a classification without letting AI failure fail the ticket (05 §6).
+
+    Imported here rather than at module scope: the AI app depends on these models, and a
+    top-level import would make the dependency run both ways. A queue, broker, or provider
+    problem must never turn a created ticket into a 500, so the failure is logged by class
+    only — never with the exception message, which can quote customer text.
+    """
+    from apps.ai_assistant.tasks import request_classification
+
+    try:
+        request_classification(ticket)
+    except Exception as exc:  # noqa: BLE001 - the ticket exists; a classification is optional
+        logger.warning(
+            "No AI classification queued for ticket %s (%s).",
+            ticket.pk,
+            type(exc).__name__,
+        )
 
 
 def get_ticket(*, access: WorkspaceAccess, ticket_id: UUID) -> Ticket:
