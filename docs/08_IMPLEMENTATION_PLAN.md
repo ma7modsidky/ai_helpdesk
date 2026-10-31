@@ -40,12 +40,50 @@ shell access.
 - T3.5 Audit events and API tests.
 **Exit:** complete manual ticket workflow works without AI.
 
-## Phase 4 — Frontend baseline
-- T4.1 App shell, authentication, workspace selector.
-- T4.2 Ticket inbox and filters.
-- T4.3 Ticket detail/conversation UI.
-- T4.4 Role-aware actions and accessible loading/error states.
-**Exit:** user can resolve a ticket end to end.
+## Phase 4 — Frontend foundation, bilingual UI, and the ticket workspace
+
+The frontend is built in slices that keep a working application after every task: project and gates
+first, then the design and language layer, then the surfaces, then the accessibility and end-to-end
+gates. Tasks are ordered so nothing is styled before tokens exist and no copy is written before the
+catalogs do. Every task includes its tests in the same change (`13_DEFINITION_OF_DONE.md`).
+
+- T4.1 Frontend project, tooling, and gates: Vite + React + TypeScript strict, pnpm lockfile, ESLint
+  (type-aware) and Prettier, Vitest + Testing Library + jsdom, the frontend CI job, a Compose dev
+  service, and a dev proxy to the API so the SPA talks to `/api/v1` same-origin (CORS stays off).
+- T4.2 Design system and theming: token set, light and dark colour schemes with CSS variables, the
+  Latin and Arabic typography scales with self-hosted fonts, MUI component defaults, the state
+  primitives (loading, empty, error, forbidden, conflict), and the no-flash theme script.
+- T4.3 Internationalization and RTL: react-i18next with `en` and `ar` catalogs, locale resolution and
+  persistence, `html` `lang`/`dir` switching, MUI direction plus the Emotion RTL cache, `Intl`
+  formatters, mirrored directional icons, the catalog-parity test, and the direction-matrix test.
+- T4.4 API client and server-state layer: the single `fetch` wrapper (CSRF bootstrap, credentials,
+  error envelope to typed `ApiError`, request-ID surfacing), the status-code behaviour table, and the
+  TanStack Query setup with the workspace-scoped key scheme and invalidation rules.
+- T4.5 Authentication screens: sign in, sign up, sign out, session restoration, protected routing,
+  post-login redirect, field-level validation from `error.details`, and expired-session handling.
+- T4.6 Invitation acceptance: `/invite/:token` preview, sign in or register with the invited address,
+  acceptance, and the expired, revoked, accepted, and mismatched-account states.
+- T4.7 Workspace picker and application shell: workspace list with roles, create-workspace flow, empty
+  state for an account with no memberships, and the shell (switcher, nav built from the route table,
+  language and theme controls, user menu, not-found and forbidden pages).
+- T4.8 Members and invitation settings: member list, role changes and revocation mirroring the server's
+  refusals, the last-owner explanation, invitation states with resend and revoke, and ownership
+  transfer with its confirmation step.
+- T4.9 Ticket inbox: URL-synced filters, ordering, and pagination; debounced search; status and
+  priority chips; skeleton, empty, filtered-empty, error, and retry states.
+- T4.10 Ticket detail and conversation: timeline with distinct public reply and internal note
+  treatment, capability-driven status/priority/assignee controls, `If-Match` writes with the conflict
+  prompt, and the audit history panel.
+- T4.11 Frontend test and accessibility gate: per-screen axe assertions in both directions, keyboard
+  and focus tests, the coverage floor for `src/`, and the hardcoded-copy rule enforced in lint.
+- T4.12 End-to-end journey in both directions: Playwright runs register → create workspace → invite →
+  accept → create ticket → resolve in `en` and `ar`, wired into CI against a seeded backend.
+
+**Exit:** a new user can register, create or join a workspace, and resolve a ticket end to end in the
+browser in English (LTR) and Arabic (RTL), in light and dark themes; every screen has loading, empty,
+forbidden, and error states; the axe gate, the direction matrix, and the Playwright journey pass in CI;
+and every permission decision is still made by the API. Proof: `frontend/src/**/*.test.tsx`,
+`frontend/e2e/journey.spec.ts`, and the frontend CI job.
 
 ## Phase 5 — Async infrastructure
 - T5.1 Configure Celery with RabbitMQ broker and Redis only for explicitly chosen cache/result use.
@@ -58,7 +96,10 @@ shell access.
 - T6.1 Define provider interface and deterministic fake provider.
 - T6.2 Implement structured classification with schema validation.
 - T6.3 Implement asynchronous processing states and retries.
-- T6.4 Add draft-generation endpoint and UI.
+- T6.4 Add draft-generation endpoint and the AI panels in the existing shell: classification (category,
+  sentiment, suggested priority, rationale), draft with source article links, processing states with
+  bounded polling, regenerate and retry, an editable field, and the explicit send action. The panels are
+  bilingual and RTL from the start like every other surface (FR-021, FR-024, FR-035).
 - T6.5 Enforce human approval; no automatic public sends.
 - T6.6 Add AI evaluation fixtures and usage limits.
 **Exit:** ticket creation works without LLM; AI draft is generated and safely reviewed.
@@ -69,6 +110,9 @@ shell access.
 - T7.3 Implement PostgreSQL full-text search first or `pgvector` if embeddings are in scope.
 - T7.4 Tenant-scoped retrieval and source citations.
 - T7.5 Prompt-injection and cross-tenant retrieval tests.
+- T7.6 Knowledge base UI (FR-030, FR-033): article list and editor with draft, published, and archived
+  state, the publish capability reflected per role, reindex status with its failure states, and a clear
+  warning that only published content is used for retrieval.
 **Exit:** draft references correct tenant-scoped published sources.
 
 ## Phase 8 — SLA and escalations
@@ -76,7 +120,9 @@ shell access.
 - T8.2 Public-response tracking.
 - T8.3 Periodic deadline task and deduplicated escalation events.
 - T8.4 Notification delivery with retry/idempotency.
-- T8.5 Manager escalation UI and tests.
+- T8.5 SLA settings and escalation UI (FR-040, FR-045): policy editing per priority with the deadline
+  rule stated in the form, validation against the service, and the manager escalation view with overdue
+  state, remaining time, and escalation history.
 **Exit:** simulated deadline causes exactly one correct escalation.
 
 ## Phase 9 — Hardening and deployment
@@ -84,10 +130,22 @@ shell access.
 - T9.2 Security headers, CORS/CSRF review, throttling, upload limits if uploads exist.
 - T9.3 Dependency, secret, SAST and container scans.
 - T9.4 Staging deployment, migrations, smoke tests, rollback instructions, and production email delivery for invitation links (provider credentials backend-only).
-- T9.5 Seeded demo data, screenshots, architecture diagram, demo script.
+- T9.5 Seeded demo data, screenshots in both locales and both themes, architecture diagram, demo script.
 - T9.6 Retention and deletion command implementing the documented policy (FR-054).
+- T9.7 Frontend release hardening: production build served as an artifact with a bundle-budget check,
+  container image, offline-safe fonts confirmed, an RTL/LTR and light/dark visual review pass, and the
+  documented frontend rollback path.
 **Exit:** CI green, staging demo reliable, documented known limitations.
 
 ## Scope rule
 
 Do not start the next phase until the current phase's exit criteria pass. If a task discovers a specification conflict, stop and propose a spec change rather than silently inventing behavior.
+
+## Frontend ordering rules
+
+- No user-visible string outside a translation catalog, and no component styled before the token set
+  exists: T4.2 before T4.5, T4.3 before any screen copy is written.
+- Every screen added after T4.12 (T6.4, T7.6, T8.5) must land with its axe assertion and its catalog
+  entries in both locales, because the direction matrix and parity test only cover what exists.
+- A frontend feature is not done until the API path it depends on is documented in
+  `04_API_CONTRACT.md`; the UI never invents an endpoint, a field, or a permission rule.

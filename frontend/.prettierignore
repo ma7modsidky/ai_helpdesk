@@ -1,0 +1,8 @@
+dist/
+coverage/
+node_modules/
+pnpm-lock.yaml
+playwright-report/
+# Playwright's own run artifacts (last-run.json and the failure folders); formatting them
+# would make the format check depend on whether a journey has been run in this checkout.
+test-results/

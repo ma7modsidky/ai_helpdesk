@@ -1,7 +1,8 @@
 # 16 — Phase 2 Audit, Traceability, and Open Decisions
 
-**Baseline** `a49e621` (2026-10-26), backend CI green; rows below were updated after T2.5, T2.6 and
-T2.7 landed in the working tree (289 tests, 99.06% branch coverage).
+**Baseline** `b80047b` (2026-10-27), backend CI green; rows below were updated after T2.5–T2.7 and
+T3.1–T3.5 landed (513 tests, 98.19% branch coverage against a 90% floor). No frontend exists yet, so
+every frontend row below is a plan claim rather than a code claim.
 
 This document answers one question: **does the implemented system, the API contract, the domain
 model, and the task plan agree?** It is a dated snapshot, not a second plan. `08_IMPLEMENTATION_PLAN.md`
@@ -39,6 +40,7 @@ built one phase ahead by design.
 | 0 — Repository and decisions | Clean clone starts dependencies; CI runs | **Met with a recorded deviation** — Compose provides PostgreSQL, Redis, RabbitMQ only (`compose.yaml`); backend, frontend, worker, beat, `Dockerfile` and `infra/` from T0.2 do not exist. Datastores start, CI runs, `runserver` works |
 | 1 — Backend foundation | Migrations work; tests and checks pass in CI | Met |
 | 2 — Tenancy and access control | Tenant isolation proven by tests before ticket features, and a workspace populated and handed over through the API | Met — isolation is proven for both tenant-owned models (`Workspace`, `Membership`) including 404-not-403 refusals, archived workspaces, removed members, and deactivated accounts; registration (T2.5), invitations (T2.6) and ownership transfer (T2.7) are implemented, satisfying the exit criterion in `08` |
+| 3 — Ticket workflow | Complete manual ticket workflow works without AI | Met — `apps/tickets` implements the models, list/create/detail, `assign`, `transition`, and messages, with the capability matrix (ADR-029), `If-Match` field edits (ADR-022), and an audit row per write; 513 tests at 98.19% coverage |
 
 Phase 2's own criterion never mentions invitations, which is precisely why the gap went unnoticed.
 The criterion is the thing to fix, not just the feature.
@@ -208,6 +210,20 @@ no chosen cache backend. **Partly resolved:** registration and invitation scopes
 **F-07 Phase 0's Compose scope was narrowed without a closing task.** No `Dockerfile`, no
 `frontend/`, no worker or beat service. Acceptable as a deferral, but `12_CI_CD.md` items 6–10
 (frontend checks, container builds) and `11_TEST_STRATEGY.md`'s container-build gate need an owner.
+**Resolved for the frontend:** T4.1 owns the `frontend/` project, its CI job and the Compose dev
+service; T4.11 owns the frontend gates that make item 7 real; T4.12 owns the end-to-end job (item 8);
+T9.7 owns the frontend container, the bundle budget and the served artifact. Still unowned: the worker
+and beat services and the backend image, which T5.1 and T9.1 carry.
+
+**F-11 No frontend phase had design, language, or accessibility owners.** `07_FRONTEND_SPEC.md` named
+routes and behaviours but no design tokens, no typography, no light/dark story, no localization or
+RTL story, and no accessibility target, while `01_PRD.md` had no requirement for any of it. A UI built
+from that spec would have been English-only, single-theme, and impossible to internationalize without
+a rewrite. **Resolved:** the user direction is English and Arabic with RTL from the first screen, a
+professional visual language, and both themes. `01_PRD.md` gains FR-060 to FR-063, `07_FRONTEND_SPEC.md`
+is rewritten with a design language, an i18n/RTL section, a theming section, accessibility targets and a
+bundle budget, Phase 4 is expanded from four tasks to twelve in `08`/`15`, and ADR-030/ADR-031 record
+the stack and the bilingual/theming decisions.
 
 **F-08 Requirements with no owner:** retention/deletion, owner transfer, observability metrics,
 FR-044 deadline recalculation, and the security spec's "customer-facing endpoints cannot read
@@ -249,7 +265,7 @@ first task that cannot be written correctly without it.
 | D-13 | Shared cache and throttle matrix | Throttles beyond login have no task and no shared backend (F-06) | Add Redis `CACHES` when Redis is first needed; publish a matrix (endpoint → rate → keying) in `10_SECURITY.md`; adopt it with the invitations endpoint | T2.6 |
 | D-14 | Readiness policy once the broker and cache exist | Today `/health/ready/` fails only on PostgreSQL; failing on broker outage would take the API out of rotation for a degraded feature | Keep readiness to PostgreSQL; expose broker/queue health separately (and alert on backlog per `12_CI_CD.md`) | T5.1 |
 | D-15 | Pull request and review policy | `12_CI_CD.md` requires "successful CI and code review" on main; work is currently committed to main and CI confirmed after the fact, so the DoD's human-review item is unenforceable | Enable branch protection with a required CI check, or record trunk-based development as an accepted deviation in ADR and drop the review requirement | immediate |
-| D-16 | Frontend routes for auth and invitations | `07_FRONTEND_SPEC.md` has no `/register` or `/invite/:token`, and `/settings/members` has no pending-invite states | Add both routes and the invite states (pending, resend, revoke, expired) to the spec before T4.1 fixes the router | T4.1 |
+| D-16 | **Settled: ADR-030, ADR-031; specified before T4.1.** Frontend routes for auth and invitations | `07_FRONTEND_SPEC.md` had no `/register` or `/invite/:token`, and `/settings/members` had no pending-invite states | Done: both routes plus the invitation states are in `07`, the route table also names the not-found route, and the bilingual/theming requirements that constrain the router are settled. T4.1–T4.12 own the implementation | T4.1 |
 
 ## 8. Process fixes (highest leverage first)
 
@@ -278,7 +294,10 @@ first task that cannot be written correctly without it.
    ship with tests and a migration.
 4. ~~Implement T2.7 ownership transfer~~ — done. Write backlog entries for T3.3, T3.4, T3.5 so Phase 3
    starts with a complete queue.
-5. Then T3.1, with the requester model and index decisions from step 1 already settled.
+5. ~~Then T3.1~~ — done. Phase 3 (T3.1–T3.5) shipped; the manual ticket workflow works end to end.
+6. Phase 4 pre-flight is complete: D-16 is settled and the frontend spec, PRD, plan, backlog and CI
+   specs were rewritten for a bilingual, RTL, light/dark, accessible UI before any frontend code exists.
+   T4.1 starts the implementation in `08`/`15` order, and T4.12 is the phase's proof rather than a demo.
 
 ## 10. Maintenance
 

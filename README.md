@@ -49,9 +49,10 @@ ai-helpdesk/
 └── README.md
 ```
 
-## Local development (current status: T3.1–T3.5 ticket workflow, no AI yet)
+## Local development (current status: backend through T3.5, frontend through T4.12, no AI yet)
 
-Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), Docker with Compose.
+Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), Docker with Compose, and — for the
+frontend — Node 22+ with [pnpm](https://pnpm.io/).
 
 ```bash
 cp .env.example .env          # then replace every placeholder value
@@ -137,6 +138,72 @@ Supply-chain gates in the same job:
   vulnerability. Fix findings or record an explicit, justified `--ignore` in the workflow.
 - `gitleaks` (pinned version, sha256-verified download) scans the full commit history for committed
   secrets. It fails the build when a leak is found; rotate the credential, don't just delete the line.
+
+Frontend (`frontend/`, T4.1–T4.10): the SPA is served on the same origin as the API, so `pnpm dev`
+proxies `/api` and `/health` to the backend (VITE_PROXY_TARGET, default `http://127.0.0.1:8000`) and no
+CORS configuration is needed. Screens implemented so far: sign in, sign up, invitation acceptance,
+the workspace picker with workspace creation, the workspace shell with its ticket inbox and ticket
+detail, and the member and invitation list.
+
+```bash
+cd frontend
+pnpm install
+pnpm dev        # http://localhost:5173, with the API proxied
+pnpm gate       # format check, lint, type check, coverage floors, production build
+```
+
+`pnpm gate` is the same set of checks the pull-request pipeline runs. The unit and component tests
+(vitest, Testing Library, jsdom, axe-core) live beside the source they cover, and the `en`/`ar`
+catalogs are checked for parity as part of the default run.
+
+Two T4.11 rules are enforced rather than reviewed: `eslint-rules/no-hardcoded-copy.js` fails lint on
+JSX text or a text attribute (`aria-label`, `placeholder`, `title`, …) written as a literal instead of
+passed through `t(...)`, and `scripts/check-bundle-budget.mjs` fails the build when gzipped JavaScript
+exceeds 300 kB, CSS 20 kB, or a single chunk 200 kB, printing the measured sizes either way.
+
+End-to-end journey (T4.12): `frontend/e2e/` drives a real browser against a real API on the same
+origin, once per direction, and needs a running backend with a migrated database:
+
+```bash
+# once, from the repository root
+docker compose up -d postgres
+cd backend && uv run python manage.py migrate
+
+# the suite registers an account per direction on every run, plus the seed account, so it runs
+# against the settings module that raises those client throttles (throttling itself is asserted
+# by the backend tests, not here)
+cd backend && DJANGO_SETTINGS_MODULE=config.settings.e2e uv run python manage.py runserver 127.0.0.1:8000
+
+# in a second shell: Playwright starts the Vite dev server itself, and the browser reaches the
+# API through the same-origin proxy
+cd frontend && pnpm e2e          # both journeys plus the seeded-backend spec
+pnpm e2e:report                  # the HTML report from the last run
+```
+
+Traces, screenshots, and an error-context snapshot are kept for anything that fails, under
+`frontend/test-results/`. `.github/workflows/frontend-ci.yml` runs the same suite in the pipeline
+against a throwaway PostgreSQL service, so a failing journey blocks the pull request.
+
+### The journey as a manual demo
+
+The automated journey is also the script for showing the product to somebody — same steps, same
+order, in a browser. Run the backend as above and `pnpm dev` in `frontend/`, then:
+
+1. Open <http://127.0.0.1:5173/register> and create an account. The picker explains that an
+   invitation is the other way into an existing workspace, which this account does not have.
+2. Create a workspace. You land in its empty ticket queue as its owner.
+3. Open **Members**, invite a second person, and copy the `/invite/...` link the dialog shows once.
+4. In a second browser profile or a private window, open that link and create the invited account
+   with the same address. The invitation is accepted and the second person lands in the same queue.
+5. Back in the first window, create a ticket: it starts open and unassigned.
+6. Assign it to the second person, reply publicly, and resolve it.
+7. Reload the second window: the ticket, the assignment, and the reply are all there, because every
+   one of those decisions was made and stored by the API.
+8. Switch the language toggle to Arabic at any point — the layout mirrors, the copy changes, and
+   nothing asks you to reload.
+
+Do it once in English and once in Arabic: the outcome has to be identical and only the direction,
+the words, and the numerals' locale may differ.
 
 ## Definition of MVP done
 

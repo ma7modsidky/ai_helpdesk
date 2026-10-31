@@ -31,24 +31,40 @@ Cover:
 - AI endpoint returns accepted/pending rather than blocking on provider.
 - Rate limiting for costly endpoints.
 
-### Frontend tests
-Cover:
-- Inbox loading/empty/error states.
-- Permission-dependent actions.
-- Public reply vs internal note mode.
-- AI draft status and retry.
-- Explicit human approval before sending.
-- Accessible labels and validation feedback.
+### Frontend component tests
+Vitest with React Testing Library and jsdom, covering behaviour rather than markup:
+- Loading, empty, filtered-empty, error, forbidden, and conflict states for every data screen.
+- Permission-dependent affordances, including that a capability the role lacks is disabled with an
+  explanation and that a server 403 is surfaced rather than swallowed.
+- Public reply vs internal note mode, and that the two are never visually interchangeable.
+- The `If-Match` conflict prompt preserving unsaved composer text.
+- The API client's status mapping, CSRF refresh, and unsafe-redirect guard.
+- Form validation errors coming from `error.details` and landing on the right field.
+
+### Frontend internationalization tests
+These guard the bilingual layer mechanically, because reviews do not catch a missing translation:
+- Catalog parity: the same key set in `en` and `ar`, with no empty values and no untranslated leftovers.
+- Direction matrix: each screen component renders in both `en` and `ar` with `dir` propagated.
+- Formatters: the same instant and number render per locale with `latn` numerals.
+- Locale resolution precedence, including an unsupported value falling back to `en`.
+
+### Frontend accessibility tests
+- `axe-core` assertions per screen component, in both directions and for the theme where colour is
+  asserted.
+- Keyboard and focus tests for dialogs, drawers, the composer, and the inbox list.
 
 ### End-to-end smoke tests
-A short automated or documented smoke journey:
-1. Log in as seeded admin.
-2. Create/open ticket.
-3. Confirm AI task status changes.
-4. Review draft and source article.
-5. Send public reply.
-6. Verify SLA response timestamp and audit event.
-7. Trigger a simulated overdue escalation.
+A short automated journey (Playwright, Chromium), run once per direction:
+1. Register a new account, then sign in.
+2. Create a workspace, invite a second user, and accept the invitation in a second browser context.
+3. Create a ticket, assign it, reply publicly, and resolve it.
+4. Assert the resolved state, the conversation treatment, and that the Arabic run has `dir="rtl"` with
+   no catalog key leaking as raw text.
+5. Confirm AI task status changes.
+6. Review draft and source article.
+7. Send public reply.
+8. Verify SLA response timestamp and audit event.
+9. Trigger a simulated overdue escalation.
 
 ## AI evaluation
 Use a fixed, versioned set of fictional cases. Assert schema validity and key safety properties; avoid brittle exact-string assertions for generated prose. Use a fake provider for normal CI. Run optional provider-backed evaluations separately with controlled budget and no real customer data.
@@ -62,12 +78,14 @@ Use a fixed, versioned set of fictional cases. Assert schema validity and key sa
 - Migration consistency check.
 - Dependency vulnerability scan.
 - Secret scan.
-- Frontend production build.
+- Frontend formatting, lint, type check, component and i18n tests, production build, and bundle budget.
 - Container build.
 - Optional SAST and image scan.
 
 ## Test principles
 - Test behavior, not implementation details.
+- A frontend test asserts what the user can see and do, so it queries by role and accessible name rather
+  than by component internals or CSS class.
 - Every bug fix gets a regression test.
 - Security invariants need explicit negative tests.
 - Do not mock the database for tests whose purpose is to validate SQL constraints or transaction behavior.

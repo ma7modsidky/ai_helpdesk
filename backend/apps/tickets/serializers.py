@@ -93,10 +93,15 @@ class TicketCreateSerializer(_StrictFieldsSerializer):
     subject = serializers.CharField(max_length=200)
     description = serializers.CharField(max_length=10000, trim_whitespace=False)
     requester_email = serializers.EmailField(max_length=254)
-    requester_name = serializers.CharField(max_length=200, required=False, default="")
+    # Both are optional and default to the empty string, so a client that sends "" for
+    # an untouched field is saying the same thing as omitting it. Refusing the empty
+    # string would make the default a value this serializer itself rejects.
+    requester_name = serializers.CharField(
+        max_length=200, required=False, allow_blank=True, default=""
+    )
     requester_user_id = serializers.UUIDField(required=False, allow_null=True, default=None)
     priority = serializers.ChoiceField(choices=TicketPriority.choices, required=False)
-    category = serializers.CharField(max_length=100, required=False, default="")
+    category = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
 
     def validate_requester_email(self, value: str) -> str:
         return value.strip().lower()

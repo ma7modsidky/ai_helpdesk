@@ -37,7 +37,16 @@ This document is an engineering checklist, not a claim of certification or legal
 - Do not use wildcard credentialed CORS.
 - Apply rate limits to login, invitation, ticket creation, AI generation, and expensive search.
 - Validate input lengths and types; use framework/ORM parameterization.
-- Avoid unsafe HTML rendering; sanitize rich text if supported.
+- The frontend bundle carries no secrets: the only build-time variable is the API base URL, and provider
+  or database credentials never reach it.
+- Avoid unsafe HTML rendering; sanitize rich text if supported (`dangerouslySetInnerHTML` is banned in the
+  frontend by lint, and rich text is out of MVP scope).
+- Session cookies are the only credential the frontend holds; no token is written to `localStorage`, so a
+  script injection cannot lift one. Locale, theme, and cached responses are the only persisted client data.
+- Post-login redirect targets are validated against the in-app route allowlist, so a crafted `next`
+  parameter cannot bounce a user to an attacker's origin.
+- The frontend surfaces the API's `request_id` for support and never renders a raw error envelope, a
+  stack trace, or a request body.
 - Add upload restrictions and malware scanning if file attachments are introduced.
 - Do not expose debug mode or stack traces in production.
 
@@ -96,6 +105,9 @@ MVP), and logs counts only — never ticket content, message bodies, or requeste
 - Cross-tenant object ID guessing returns no data.
 - Agent cannot change workspace roles or owner settings.
 - Internal notes cannot be read through customer-facing endpoints.
+- A UI affordance never substitutes for a server check: every action offered in the browser is covered by
+  the API test that refuses it for an unauthorized caller.
+- The frontend bundle contains no secret, tested by the secret scan over `frontend/` and its lockfile.
 - User cannot publish AI draft without appropriate permission.
 - AI retrieval cannot return another workspace's article.
 - Rate limit blocks abusive AI request volume.

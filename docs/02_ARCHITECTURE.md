@@ -5,7 +5,9 @@
 Use a **modular monolith** for the MVP. One Django deployment owns the business domain; Celery workers execute background jobs. Avoid microservices until there is measured operational or organizational need.
 
 ### Runtime components
-- React + TypeScript frontend.
+- React + TypeScript single-page application (Vite, MUI, react-i18next) served as static assets, bilingual
+  English/Arabic with light and dark themes. In local development and in the container deployment the
+  SPA is served on the same origin as the API, so no CORS configuration exists (ADR-030).
 - Django + Django REST Framework API.
 - PostgreSQL as source of truth.
 - Redis for cache, throttling support, and Celery result/broker-adjacent use only where explicitly configured.
@@ -57,6 +59,17 @@ Use a **modular monolith** for the MVP. One Django deployment owns the business 
 
 Modules should expose service functions/use cases instead of importing each other's ORM internals indiscriminately.
 
+### Frontend modules (mirror of the backend's boundaries)
+- `app`: providers, router, error boundary, and the shell layout; the only module that wires features together.
+- `features/<domain>`: one folder per product area (auth, invitations, workspaces, tickets, knowledge,
+  sla), containing that area's queries, mutations, and screens.
+- `lib/api`: the single HTTP client, error mapping, and query-client configuration.
+- `theme` and `i18n`: tokens, colour schemes, direction handling, catalogs, and formatters.
+- `components`: presentational building blocks with no product knowledge.
+
+The frontend holds no authorization logic of its own: it renders affordances from the role data it holds
+and mirrors server refusals. Any rule that must be true for security lives in the API.
+
 ## 4. Dependency rules
 
 - Views/serializers handle HTTP concerns; they do not contain substantial business logic.
@@ -64,6 +77,10 @@ Modules should expose service functions/use cases instead of importing each othe
 - AI provider implementation is behind an interface, allowing fake/mock providers in tests.
 - Celery tasks are thin orchestration wrappers that call services.
 - Frontend never calls the LLM provider directly or receives server secrets.
+- The frontend never derives a permission, transition, or SLA rule; it sends a request and renders the
+  answer, so the server stays the single source of truth (ADR-021, ADR-022).
+- Cross-feature imports are forbidden on the frontend too: shared code moves down into `components` or
+  `lib`, never sideways between features.
 - All tenant-scoped queries must originate from an authorized workspace context.
 - External calls have explicit timeouts and bounded retries.
 

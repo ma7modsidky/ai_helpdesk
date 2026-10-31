@@ -258,8 +258,97 @@ Record material decisions using this template.
 - **Consequences:** Ticket writes must go through `services`; a serializer that wrote a field directly would skip both the version bump and the audit row. Roles are re-read inside each write, so a membership revoked mid-request is refused, but ticket writes never take the workspace lock, so they cannot block or be blocked by membership changes. Audit rows are readable through no endpoint yet and are retained 24 months. Membership, invitation and ownership-transfer changes are still unaudited: `10_SECURITY.md` requires role-change auditing, the model can carry it, and it is recorded here as the remaining gap to close in T9.2 rather than claimed as done.
 - **Verification:** `apps/tickets/tests/` covers the 25 status pairs per role, the version-conflict statement under two concurrent edits, two concurrent resolutions, concurrent message appends, the full role × ticket-capability matrix, `If-Match` in quoted, unquoted, weak and malformed forms, and one audit event per write with identifiers only.
 
+### ADR-030: Frontend stack, server state, and single-origin serving
+- **Status:** accepted
+- **Date:** 2026-10-27
+- **Context:** `07_FRONTEND_SPEC.md` offered "React + TypeScript + Vite, or Next.js if SSR/routing is a specific learning goal" and deliberately left the component library, the server-state layer, the package manager, and the test runner unnamed. Phase 4 is starting, so those choices are about to be made implicitly by whichever screen is written first — the same failure mode ADR-021 and ADR-029 recorded on the backend, where an unnamed rule is invented at the point of use. The deployment question sits in the same gap: a separate origin for the SPA would require credentialed CORS plus `CSRF_TRUSTED_ORIGINS`, and `10_SECURITY.md` warns against wildcard credentialed CORS.
+- **Decision:** A Vite single-page application: React + TypeScript (strict, with unsafe index access and exact optional properties as errors), **MUI** as the only component kit, Emotion as the styling engine with MUI's official RTL stylis plugin, React Router for routing with route-level code splitting, and **TanStack Query** for server state (justified concretely by list caching and invalidation after writes, URL-state pagination, and the bounded polling FR-024 needs for AI job state). No global state library: the server is the source of truth and local state is component state. pnpm with a committed lockfile, ESLint (type-aware, flat config) plus Prettier, Vitest with Testing Library and jsdom for component tests, axe-core for accessibility assertions, and Playwright (Chromium) for the end-to-end journey. The SPA is served on the **same origin** as the API in development (Vite proxy) and in deployment (the frontend container proxies `/api`), so no CORS configuration is added and `CSRF_TRUSTED_ORIGINS` stays empty.
+- **Alternatives:** Next.js (rejected: nothing in the product needs SSR or server routing, it adds a second runtime to build, test and deploy, and the portfolio value is the domain model rather than a rendering strategy); leaving the kit unnamed until a screen demands one (rejected: that is how an app ends up with three button styles and no theme); Mantine or Chakra (rejected: credible RTL and theming, but MUI ships an official, MUI-version-matched RTL plugin, the deepest accessibility coverage, and the largest ecosystem for the tables, drawers and pickers this product needs); Tailwind plus bespoke components (rejected by the same reasoning in reverse: it maximises styling work for a team of one and re-implements accessibility that MUI already tests); a global store such as Redux or Zustand (rejected: caching, invalidation and pagination are server-state concerns, which is exactly what the query layer solves); hand-written query hooks (rejected: caching, deduplication, stale-while-revalidate and bounded polling would all be re-implemented, and that custom code is what bugs live in); Jest (rejected: a second transform pipeline alongside Vite); separate API origin with credentialed CORS (rejected: more moving parts, a looser browser security posture, and CSRF trusted-origin configuration for no product gain).
+- **Consequences:** The initial bundle is the thing to watch, because MUI is a large dependency — hence named imports by path, route-level splitting, and the bundle budget that T4.11 enforces and T9.7 reports. Every screen composes theme defaults instead of restyling, and `features/*` may not import another feature's internals. Query keys are workspace-scoped, so a workspace switch cannot serve a cached list from another tenant. Serving on one origin means a deployment that later wants a separate CDN or origin must add CORS and CSRF configuration deliberately rather than discovering it in production. Login is a session cookie, so the app stores no token of its own.
+- **Verification:** T4.1 proves the toolchain from a frozen lockfile in CI; T4.4 tests the client's status mapping, CSRF refresh and redirect guard; T4.9/T4.10 test the URL-state and invalidation behaviour; T4.11 fails the build when the bundle budget is exceeded; T9.7 builds the container image that serves the SPA and proxies the API on one origin.
+
+### ADR-031: Bilingual UI with RTL from the first screen, and light/dark themes
+- **Status:** accepted
+- **Date:** 2026-10-27
+- **Context:** The product direction is an English **and** Arabic interface with right-to-left layout from the start, a professional visual language, and both light and dark themes — none of which any document required: `01_PRD.md` had no localization or theming requirement at all, and `07_FRONTEND_SPEC.md` implicitly assumed English-only, single-theme screens. RTL is not a stylesheet flip: direction changes layout order, icon orientation, scroll behaviour, component internals (drawer anchor, tab scrolling, autocomplete placement, tooltip offsets), and typography. Retrofitting it after a dozen screens exist means editing all of them and re-reviewing all of them. The locale's storage location was also open: a per-user column on the server, or client-side only.
+- **Decision:** Two shipped locales, `en` (LTR) and `ar` (RTL), with the architecture able to accept more. **i18next + react-i18next** catalogs are the only source of user-visible copy — including labels, placeholders, `aria-label`s and empty-state text — and a parity test fails when the two catalogs disagree. Locale resolution is `?lang=` → `localStorage` → `navigator.languages` → `en`, persisted client-side; the API stays locale-agnostic and gains no column (client-only, as chosen). Direction is applied in exactly one provider that updates `html dir`/`lang`, rebuilds the MUI theme with `direction`, and swaps the Emotion cache for the RTL one built with MUI's RTL stylis plugin; app code uses logical CSS properties, mirrors directional icons through a single `DirectionalIcon` component, and keeps numbers and timestamps in a consistent order. Typography is self-hosted Inter Variable (Latin) and Noto Sans Arabic Variable (Arabic) in one stack, with Arabic line-height compensation and no letter spacing applied as a locale rule in the theme. Dates, numbers and relative times go through `Intl` with `latn` numerals by deliberate choice, matching regional business-software practice. Themes: light and dark are declared together through MUI's `colorSchemes` over CSS theme variables, the default follows the operating system with a persisted three-state control, and an inline script in `index.html` applies the stored mode before the bundle runs so there is no flash of the wrong theme.
+- **Alternatives:** a per-user `locale` column and API field (rejected for MVP: a migration and a contract change for a presentation preference no requirement depends on; the cost is recorded rather than hidden — invitation and notification emails stay English until a server-side locale exists); locale in the URL path (rejected: it would complicate every route and share link, while `?lang=` covers deep-linking a language); `dir` on the element without `theme.direction` and the RTL cache (rejected: MUI's own components would keep LTR internals, producing mirrored-looking but subtly broken widgets); a mirrored second stylesheet with physical properties (rejected: two sources of truth that drift, and every future rule duplicated); keeping English-only and translating later (rejected: direction touches every layout, so the cost only grows); shipping dark mode later (rejected: colour tokens would be retrofitted across every component, and a single-theme palette tends to encode assumptions that break in the other mode); MUI's `palette` API with a hand-rolled mode switch (rejected: `colorSchemes` gives system detection, cross-tab synchronisation and zero re-render, all of which hand-rolled state would have to reproduce); Arabic as a right-to-left-only variant with Latin as the default fallback order (rejected: the fallback must follow the user's browser, not a fixed priority).
+- **Consequences:** Every new screen after T4.12 must land with both catalogs, its direction-matrix coverage and its axe assertion, or the gates stop covering it — which is why `08_IMPLEMENTATION_PLAN.md` states that rule for T6.4, T7.6 and T8.5. A third locale becomes a catalog plus a direction entry rather than a refactor. Contrast has to be reviewed twice, in both themes. The Arabic copy in these catalogs is authored during implementation and must be reviewed by a native speaker before any demo or public deployment; it is not machine-translated at runtime. `latn` numerals are a product decision that a future locale may revisit. Emails remain English. Because the locale is client-only, two devices can show the same account in different languages, which is intentional.
+- **Verification:** a catalog-parity test over `en`/`ar`; a direction-matrix test rendering each screen component in both directions; axe assertions in both directions; formatter tests for `Intl` output and `latn` numerals; T4.12 runs the end-to-end journey once per direction and asserts `dir="rtl"` and that no catalog key leaks as a raw identifier; T9.5 records screenshots in both locales and both themes.
+
 ## Changelog
 Add dated entries as features or specs change. Keep this file concise; detailed implementation notes belong in pull requests.
+
+- 2026-10-31: T4.11 closeout, the last two items Phase 4 was missing. The no-hardcoded-copy rule is
+  now a local ESLint rule (`frontend/eslint-rules/no-hardcoded-copy.js`): it fails on JSX text and on
+  text attributes (`aria-label`, `aria-description`, `aria-placeholder`, `aria-roledescription`,
+  `alt`, `placeholder`, `title`, `label`, `helperText`, `caption`, `description`, `heading`,
+  `subtitle`) written as a literal rather than passed through `t(...)`. Only string literals are
+  reported — a computed value is not the rule's business — text without a letter (a separator, a
+  numeral) is allowed, and tests are exempt because asserting copy through `t()` would make the
+  assertion follow the catalog instead of pinning it. The existing screens needed no changes: every
+  user-visible string already came from a catalog, so the rule closes the gap for future work rather
+  than fixing past work. `frontend/scripts/check-bundle-budget.mjs` runs after `vite build` and fails
+  the gate on gzipped JavaScript above 300 kB, CSS above 20 kB, or a single chunk above 200 kB, and
+  prints the measured sizes in both outcomes. Measured now: 240.3 kB JavaScript, 1.7 kB CSS, largest
+  chunk 112.2 kB. Both are steps in `pnpm gate` and in `frontend-ci.yml`.
+
+- 2026-10-27: T4.12 end-to-end journey. `frontend/e2e/` drives a real browser against a real API on
+  one origin: `seed.ts` and `global-setup.ts` create the demo workspace and its tickets through the
+  public contract (idempotent, fictional data, no fixture file), `journey.spec.ts` runs
+  register → create workspace → invite → accept in a second browser context → create ticket → assign →
+  reply → resolve once per direction, and `seeded.spec.ts` reads the seeded queue through a
+  server-side filter. The Arabic run asserts `dir`/`lang` on the document, that the navigation rail
+  mirrors the content, and that no catalog key leaks as raw text. Two defects the journey found are
+  fixed: the create-ticket serializer defaulted `requester_name` and `category` to the empty string
+  while rejecting an explicit `""`, so a form that submits every field it rendered was told they were
+  blank; and the locale resolved from `?lang=` was never persisted, so an invitee who opened an
+  invitation in Arabic was handed back to English by the sign-up link on the page they landed on.
+  `frontend-ci.yml` runs the frontend gates and the
+  journey against a throwaway PostgreSQL service with traces retained on failure, and `config.settings.e2e`
+  raises the client throttles for the suite because it registers accounts on every run (the backend
+  tests still assert each throttle scope). Documented as the manual demo script in the README.
+
+- 2026-10-27: T4.1–T4.10 frontend implemented, and the frontend gates now run. The SPA exists under
+  `frontend/`: Vite + React 19 + TypeScript strict, MUI 9 with Emotion and MUI's RTL stylis plugin,
+  TanStack Query as the only server-state layer, React Router 7 with a code-split inbox, and i18next
+  with `en`/`ar` catalogs (ADR-030, ADR-031). Implemented: theme tokens with both colour schemes, the
+  direction provider that swaps the Emotion cache and `html dir`/`lang`, `DirectionalIcon`, the API
+  client (CSRF token handling, request-id capture, envelope-to-field-error mapping) and query client
+  (401 sets the session to `null`; no retry for a definite 4xx answer), `/login`, `/register`,
+  `/invite/:token` with expiry, revoked, accepted and wrong-account states, `/app/workspaces` with its
+  empty state and create dialog, the authenticated shell (navigation from one table, workspace
+  switcher, account menu, skip link, mobile drawer), the ticket inbox with URL-state filters and the
+  empty-versus-filtered-empty distinction, the guard that waits for the session and explains an
+  expiry, and the `/app` root redirect and not-found route. `pnpm gate` (format check, lint, type
+  check, coverage, build) passes: 160 tests at 89.63% statements, 87.06% branches, 81.98% functions,
+  89.59% lines against the 80/75/80/80 floors.
+
+- 2026-10-27: Frontend lint gate repaired after it had never run. The type-checked ESLint configs were
+  applied to every file while the parser program was configured only for TypeScript, so `eslint .`
+  aborted with a parser error on `eslint.config.js` and linted nothing — which is why 30 findings had
+  accumulated unseen. The configs are now scoped to `**/*.{ts,tsx}` and the findings are fixed rather
+  than suppressed: router navigations are explicitly voided (`useNavigate` returns a promise),
+  `RequireAuth` reads its session ref in the effect that redirects instead of during render, the
+  create-workspace dialog is mounted only while open so no reset effect exists, `createQueryClient`
+  keeps its `const`, and test mocks no longer declare `async` without awaiting. The axe assertion also
+  runs against `document.body` so dialogs and menus rendered in a portal are covered, which is how a
+  heading-order violation in the workspace list was found. Still open from T4.11: the
+  no-hardcoded-copy lint rule and the bundle-budget check that fails the build; T4.12's end-to-end
+  journey is not written.
+
+- 2026-10-27: **Phase 4 pre-flight: the frontend is specified before it is built.** Phase 4 was four
+  tasks with no design, language, or accessibility owner (audit F-11). `07_FRONTEND_SPEC.md` is rewritten
+  with the chosen stack, a design language (tokens, typography, icons, component inventory, mandatory
+  screen states), an internationalization and RTL section, theming, the route table including the missing
+  `/register` and `/invite/:token` (D-16), API integration and status-code behaviour, WCAG 2.2 AA targets,
+  a bundle budget, and the frontend quality gates. `01_PRD.md` gains FR-060 to FR-063 and a bilingual
+  success criterion; `08` expands Phase 4 from four tasks to twelve (T4.1–T4.12) and adds T7.6, T9.7 plus
+  frontend ordering rules; `15` gains the matching prompts; `02`, `10`, `11`, `12` and `13` gain the
+  frontend boundaries, security rules, test layers, CI steps and definition-of-done items; `16` resolves
+  D-16 and F-07 for the frontend and records F-11. Recorded ADR-030 (stack, server state, single-origin
+  serving) and ADR-031 (bilingual RTL UI, client-only locale, light/dark themes). No frontend code exists
+  yet; T4.1 is next.
 
 - 2026-10-26: Phase 3 ticket workflow, T3.1–T3.5. New `apps/tickets`: `Ticket` (requester contact snapshot, optional `requester_user_id`, `version`, three query indexes), `TicketMessage` (public reply versus internal note), and `TicketEvent` (append-only audit). Endpoints: list with the allowlisted filters and `ordering`, create, detail, `PATCH` with `If-Match`, `assign`, `transition`, and message list/create. Transitions follow ADR-009 in a pure service function; assignment and transitions lock the ticket row and bump the version, field edits use one conditional `UPDATE`, and a message moves only `updated_at`. `tickets.edit` joins the capability matrix (ADR-029), ticket creation is throttled, and every write records an audit event. 513 tests at 98.19% coverage. Phase 3's exit criterion is met: the manual ticket workflow works end to end without AI.
 

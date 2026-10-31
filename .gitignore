@@ -20,6 +20,13 @@ coverage.xml
 node_modules/
 dist/
 build/
+coverage/
+*.tsbuildinfo
+
+# Playwright (T4.12): reports, traces, and the seeded-account state file
+playwright-report/
+test-results/
+frontend/e2e/.seed-state.json
 
 # IDE and operating system
 .vscode/

@@ -183,6 +183,20 @@ def test_creation_returns_an_open_unassigned_ticket(
     }
 
 
+def test_the_optional_fields_may_be_sent_blank(
+    csrf_client: CsrfClient, workspace: Any, owner: User
+) -> None:
+    # Their declared default is the empty string, so a form that submits every field it
+    # rendered — even the ones the user left alone — must not be told they are blank.
+    sign_in(csrf_client, owner)
+
+    response = create_ticket(csrf_client, workspace.id, requester_name="", category="")
+
+    assert response.status_code == 201
+    assert response.json()["requester_name"] == ""
+    assert response.json()["category"] == ""
+
+
 def test_an_agent_can_create_a_ticket(csrf_client: CsrfClient, workspace: Any, agent: User) -> None:
     sign_in(csrf_client, agent)
 

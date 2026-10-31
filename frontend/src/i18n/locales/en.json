@@ -1,0 +1,305 @@
+{
+  "common": {
+    "appName": "ResolveAI Helpdesk",
+    "loading": "Loading…",
+    "actions": {
+      "retry": "Try again",
+      "cancel": "Cancel",
+      "create": "Create",
+      "save": "Save",
+      "done": "Done",
+      "copy": "Copy link",
+      "copied": "Link copied",
+      "signOut": "Sign out",
+      "reload": "Reload"
+    },
+    "language": {
+      "label": "Language",
+      "en": "English",
+      "ar": "العربية"
+    },
+    "theme": {
+      "label": "Theme",
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    }
+  },
+  "a11y": {
+    "skipToContent": "Skip to content",
+    "toggleNavigation": "Toggle navigation",
+    "userMenu": "Account menu",
+    "languageMenu": "Change language",
+    "themeMenu": "Change theme",
+    "workspaceMenu": "Switch workspace"
+  },
+  "errors": {
+    "title": "Something went wrong",
+    "requestId": "Request ID: {{id}}",
+    "network": "We could not reach the server. Check your connection and try again.",
+    "unexpected": "An unexpected error occurred.",
+    "unauthorized": "Your session has ended. Sign in to continue.",
+    "forbidden": "Your role does not allow this action.",
+    "notFound": "We could not find what you were looking for.",
+    "conflict": "This changed since you loaded it. Reload and try again.",
+    "throttled": "Too many requests. Wait a moment and try again.",
+    "server": "The server could not complete the request.",
+    "validation": "Check the highlighted fields and try again."
+  },
+  "enums": {
+    "role": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "manager": "Manager",
+      "agent": "Agent"
+    },
+    "invitationState": {
+      "pending": "Pending",
+      "expired": "Expired",
+      "accepted": "Accepted",
+      "revoked": "Revoked"
+    },
+    "memberStatus": {
+      "active": "Active",
+      "removed": "Access withdrawn"
+    },
+    "status": {
+      "open": "Open",
+      "in_progress": "In progress",
+      "waiting_on_customer": "Waiting on customer",
+      "resolved": "Resolved",
+      "closed": "Closed"
+    },
+    "priority": {
+      "low": "Low",
+      "normal": "Normal",
+      "high": "High",
+      "urgent": "Urgent"
+    }
+  },
+  "auth": {
+    "fields": {
+      "email": "Email",
+      "password": "Password"
+    },
+    "signIn": {
+      "title": "Sign in",
+      "subtitle": "Use the email address your workspace knows.",
+      "submit": "Sign in",
+      "noAccount": "Need an account?",
+      "createAccount": "Create one"
+    },
+    "signUp": {
+      "title": "Create your account",
+      "subtitle": "Then create a workspace, or accept an invitation.",
+      "submit": "Create account",
+      "haveAccount": "Already have an account?",
+      "signIn": "Sign in",
+      "passwordHint": "Use at least 8 characters, and avoid a password close to your email address."
+    },
+    "sessionExpired": "Your session ended. Sign in again to continue.",
+    "signedInAs": "Signed in as {{email}}"
+  },
+  "workspaces": {
+    "title": "Your workspaces",
+    "subtitle": "Choose a workspace to work in.",
+    "empty": {
+      "title": "No workspace yet",
+      "description": "Create a workspace to start handling tickets. An invitation grants access to an existing workspace instead."
+    },
+    "create": "Create workspace",
+    "createTitle": "New workspace",
+    "createDescription": "You become its owner and can invite people afterwards.",
+    "fields": {
+      "name": "Name",
+      "slug": "Slug",
+      "slugHint": "Lowercase letters, numbers and hyphens.",
+      "timezone": "Time zone"
+    },
+    "open": "Open",
+    "switch": "Switch workspace",
+    "notFound": {
+      "title": "Workspace not found",
+      "description": "It may have been archived, or your access may have been removed."
+    },
+    "backToPicker": "Back to your workspaces"
+  },
+  "tickets": {
+    "inbox": {
+      "title": "Tickets",
+      "count_one": "{{count}} ticket",
+      "count_other": "{{count}} tickets",
+      "filters": {
+        "search": "Search",
+        "searchPlaceholder": "Search the subject",
+        "status": "Status",
+        "priority": "Priority",
+        "assignee": "Assignee",
+        "ordering": "Order by",
+        "anyStatus": "Any status",
+        "anyPriority": "Any priority",
+        "anyAssignee": "Anyone",
+        "me": "Assigned to me",
+        "unassigned": "Unassigned"
+      },
+      "ordering": {
+        "recent": "Recently updated",
+        "newest": "Newest first",
+        "priority": "Priority, highest first",
+        "status": "Status"
+      },
+      "columns": {
+        "subject": "Subject",
+        "status": "Status",
+        "priority": "Priority",
+        "requester": "Requester",
+        "updated": "Updated"
+      },
+      "empty": {
+        "title": "No tickets yet",
+        "description": "Tickets your team creates, and anything your customers send, will appear here."
+      },
+      "filteredEmpty": {
+        "title": "No tickets match these filters",
+        "description": "Try a different status, priority or assignee, or clear the filters.",
+        "action": "Clear filters"
+      }
+    },
+    "create": {
+      "action": "New ticket",
+      "title": "New ticket",
+      "description": "Record a request. It starts open and unassigned.",
+      "fields": {
+        "subject": "Subject",
+        "description": "Description",
+        "requesterEmail": "Requester email",
+        "requesterName": "Requester name",
+        "category": "Category"
+      }
+    },
+    "detail": {
+      "backToInbox": "Back to the inbox",
+      "requester": "Requester: {{requester}}",
+      "created": "Created {{date}}",
+      "updated": "Updated {{date}}",
+      "description": "Description",
+      "conflict": "This ticket changed since you loaded it. Reload it and apply your change again — your unsent message is kept.",
+      "controls": {
+        "title": "Fields and assignment",
+        "readOnly": "Your role ({{role}}) can read this ticket but not change it."
+      },
+      "visibility": {
+        "public_reply": "Public reply",
+        "internal_note": "Internal note",
+        "internalNoteHint": "Only your team can see this."
+      },
+      "refusals": {
+        "transition": "That status change is not allowed from the current state.",
+        "assignee": "That person cannot be assigned this ticket."
+      },
+      "composer": {
+        "title": "Write",
+        "visibilityLabel": "Who can see this message",
+        "chooseVisibility": "Choose whether this is a reply the requester sees or a note for your team.",
+        "publicHint": "The requester sees this reply.",
+        "body": "Message",
+        "send": "Send",
+        "sending": "Sending…"
+      },
+      "timeline": {
+        "title": "Conversation",
+        "systemAuthor": "System",
+        "truncated": "Showing the oldest messages only; this ticket has more than one page of them.",
+        "empty": {
+          "title": "Nothing here yet",
+          "description": "Replies and internal notes on this ticket will appear here."
+        }
+      }
+    }
+  },
+  "members": {
+    "title": "Members",
+    "subtitle": "Everyone in this workspace, and the invitations that are still outstanding.",
+    "readOnly": "You are a {{role}} here, so you can see the members but not change them.",
+    "list": {
+      "title": "Members",
+      "columns": {
+        "email": "Email",
+        "role": "Role",
+        "status": "Status",
+        "joined": "Joined",
+        "actions": "Actions"
+      }
+    },
+    "actions": {
+      "revoke": "Withdraw access",
+      "restore": "Restore access",
+      "transfer": "Make owner",
+      "resend": "Resend",
+      "revokeInvitation": "Revoke"
+    },
+    "invite": {
+      "action": "Invite someone",
+      "title": "Invite someone",
+      "description": "They join with the role you choose once they accept the link you share.",
+      "fields": {
+        "email": "Email",
+        "role": "Role"
+      },
+      "submit": "Create invitation",
+      "linkTitle": "Share this link",
+      "linkDescription": "This is shown once. Anyone who opens it joins as {{role}} until it expires."
+    },
+    "invitations": {
+      "title": "Invitations",
+      "empty": "No invitations in this view.",
+      "expires": "Expires {{date}}",
+      "filters": {
+        "pending": "Pending and expired",
+        "accepted": "Accepted",
+        "revoked": "Revoked",
+        "all": "All"
+      },
+      "columns": {
+        "email": "Email",
+        "role": "Role",
+        "state": "State",
+        "created": "Created",
+        "actions": "Actions"
+      },
+      "deliveryStatus": {
+        "sent": "Email sent",
+        "failed": "Email could not be sent",
+        "pending": "Email not sent yet"
+      }
+    },
+    "transfer": {
+      "title": "Hand over ownership",
+      "description": "{{email}} becomes the owner of this workspace, and you become an admin.",
+      "submit": "Hand over ownership"
+    },
+    "refusals": {
+      "capability": "Your role in this workspace does not allow this change.",
+      "lastOwner": "A workspace must keep at least one active owner. Hand ownership to someone else first.",
+      "targetInactive": "Only an active member can become the owner.",
+      "duplicateInvitation": "An invitation for this address is already pending. Resend or revoke it instead.",
+      "notPending": "This invitation is no longer pending."
+    }
+  },
+  "invitations": {
+    "title": "Workspace invitation",
+    "offer": "You are invited to join {{workspace}} as {{role}}.",
+    "accept": "Accept invitation",
+    "accepting": "Accepting…",
+    "requiresSignIn": "Sign in or create an account with the invited email address to accept.",
+    "switchAccount": "Sign in with another address",
+    "wrongAccount": "You are signed in as {{email}}, which is not the invited address. Sign in with the invited address to accept.",
+    "invalid": {
+      "title": "This invitation cannot be used",
+      "notFound": "The link is not valid. Ask the person who invited you for a new one.",
+      "expired": "This invitation expired. Ask a workspace admin to resend it.",
+      "revoked": "This invitation was revoked. Ask a workspace admin for a new one.",
+      "accepted": "This invitation was already accepted. Sign in to open the workspace."
+    }
+  }
+}

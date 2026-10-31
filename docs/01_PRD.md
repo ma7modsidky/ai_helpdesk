@@ -30,6 +30,8 @@ ResolveAI provides a shared ticket workspace with AI-assisted classification, kn
   (ADR-020, ADR-025).
 - Team- or queue-based routing: teams are post-MVP and tickets have no `team_id` (ADR-024).
 - Multi-region deployment or Kubernetes.
+- Locales beyond English and Arabic: the architecture supports more, MVP ships two.
+- Server-side rendering and a native mobile application.
 - Formal legal/compliance certification.
 - Storing payment-card data or sensitive medical data.
 
@@ -122,6 +124,16 @@ Maintains service health and investigates failures; access to customer content m
 - FR-044: Changing priority or policy recalculates the deadline through a domain service.
 - FR-045: A ticket that has received a qualifying public response is not repeatedly escalated for the same first-response deadline.
 
+### Interface and localization
+- FR-060: The interface is bilingual, English (`en`, left-to-right) and Arabic (`ar`, right-to-left). Every
+  user-visible string comes from a translation catalog; no screen is shipped in one language only, and
+  switching language applies direction, typography, and formatting together without a reload.
+- FR-061: A user can choose light, dark, or system theme, and the choice persists between visits.
+- FR-062: Every data screen has explicit loading, empty, error, forbidden, and conflict states, and never
+  displays a raw backend error or stack trace.
+- FR-063: The application is keyboard operable and meets WCAG 2.2 AA contrast, labelling, and focus
+  requirements in both languages and both themes.
+
 ### Operations
 - FR-050: Health/readiness checks distinguish application health from dependency readiness.
 - FR-051: Logs include request/correlation IDs and task IDs where applicable, without secrets or unnecessary ticket contents.
@@ -135,7 +147,8 @@ Maintains service health and investigates failures; access to customer content m
 - Reliability: API ticket creation does not synchronously depend on LLM availability; background tasks retry safely.
 - Performance: paginate list endpoints; avoid N+1 queries; index measured filter/sort paths; set explicit LLM/network timeouts.
 - Maintainability: type hints, small modules, service/domain boundaries, consistent error format, meaningful tests.
-- Accessibility: keyboard-friendly forms, labels, visible focus states, semantic HTML, accessible status feedback.
+- Accessibility: keyboard-friendly forms, labels, visible focus states, semantic HTML, accessible status feedback, WCAG 2.2 AA contrast in both themes.
+- Localization: English and Arabic with correct text direction, locale-aware dates and numbers, and no layout that assumes one direction (FR-060).
 - Observability: structured logs, task failure visibility, basic metrics for queue depth, task duration, AI latency/failure rate, SLA breaches.
 - Portability: Docker Compose local environment and environment-variable configuration.
 
@@ -148,6 +161,7 @@ Maintains service health and investigates failures; access to customer content m
 - Duplicate task delivery does not create duplicate messages/escalations.
 - AI-generated replies remain drafts until an authorized human sends them.
 - CI passes on the default branch.
+- The interface is usable end to end in Arabic (right-to-left) and English (left-to-right), in light and dark themes, with no untranslated string and no layout that breaks when direction changes.
 - A short demo shows ticket creation, AI assistance, reply approval, and SLA escalation.
 
 ## 9. Product risks
