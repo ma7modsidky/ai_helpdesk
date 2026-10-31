@@ -23,6 +23,7 @@ import { useSession } from '@/features/auth/useSession';
 
 import { DEFAULT_WORKSPACE_SEGMENT, workspacePath } from '@/app/navigation';
 
+import { TicketAIPanel } from './TicketAIPanel';
 import { TicketPriorityChip, TicketStatusChip } from './TicketChips';
 import { TicketComposer } from './TicketComposer';
 import { TicketTimeline } from './TicketTimeline';
@@ -297,6 +298,14 @@ export function TicketDetailPage() {
           truncated={(messages.data?.count ?? 0) > MESSAGES_PAGE_SIZE}
         />
       </Stack>
+
+      {/* Between the conversation and the composer on purpose: a draft is a starting point
+          for a reply, and the send action belongs with the writing it produces. */}
+      <TicketAIPanel
+        workspaceId={workspaceId}
+        ticketId={ticketId}
+        canComment={can(role, 'tickets.comment')}
+      />
 
       <TicketComposer workspaceId={workspaceId} ticketId={ticketId} />
     </Stack>

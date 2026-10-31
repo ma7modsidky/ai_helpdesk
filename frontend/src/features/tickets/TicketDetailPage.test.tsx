@@ -78,6 +78,18 @@ const INTERNAL_NOTE = {
   created_at: '2026-01-02T11:30:00Z',
 };
 
+const DRAFT_WITH_SOURCE = {
+  id: 'd1',
+  status: 'succeeded',
+  draft_text: 'We have refunded the duplicate charge. It should appear within five business days.',
+  source_articles: [{ article_id: 'article-1', title: 'Refund policy' }],
+  provider: 'fake',
+  model: 'fake-model-v1',
+  requires_human_approval: true,
+  error: null,
+  created_at: '2026-01-02T12:00:00Z',
+};
+
 function page(results: readonly unknown[]) {
   return { count: results.length, next: null, previous: null, results };
 }
@@ -87,6 +99,7 @@ interface MockOptions {
   readonly members?: readonly unknown[];
   readonly ticket?: unknown;
   readonly messages?: readonly unknown[];
+  readonly ai?: { readonly classification?: unknown; readonly draft?: unknown };
   readonly onWrite?: (path: string, method: string, body: unknown) => unknown;
 }
 
@@ -97,6 +110,7 @@ function mockTicket(options: MockOptions = {}) {
     members = [OWNER_ROW, AGENT_ROW],
     ticket = TICKET,
     messages = [PUBLIC_REPLY, INTERNAL_NOTE],
+    ai = { classification: null, draft: null },
     onWrite,
   } = options;
 
@@ -123,6 +137,12 @@ function mockTicket(options: MockOptions = {}) {
     }
     if (path.startsWith('/workspaces/w1/tickets/t1/messages/')) {
       return Promise.resolve(page(messages));
+    }
+    if (path === '/workspaces/w1/tickets/t1/ai-status/') {
+      return Promise.resolve({
+        classification: ai.classification ?? null,
+        draft: ai.draft ?? null,
+      });
     }
     throw new Error(`Unexpected request: ${path}`);
   });
@@ -305,6 +325,77 @@ describe('TicketDetailPage', () => {
     await userEvent.click(await screen.findByRole('link', { name: 'Back to the inbox' }));
 
     expect(await screen.findByText('inbox screen')).toBeInTheDocument();
+  });
+});
+
+describe('TicketDetailPage AI panel', () => {
+  it('shows the draft with its cited sources and sends it only when asked', async () => {
+    const writes: { path: string; body: unknown }[] = [];
+    mockTicket({
+      ai: { draft: DRAFT_WITH_SOURCE },
+      onWrite: (path, method, body) => {
+        writes.push({ path, body });
+        expect(method).toBe('POST');
+        return { ...PUBLIC_REPLY, id: 'msg9' };
+      },
+    });
+
+    renderDetail();
+
+    const editor = await screen.findByLabelText('Draft reply');
+    expect(editor).toHaveValue(DRAFT_WITH_SOURCE.draft_text);
+    // The citation is shown, not asserted by the model: the agent can see what it rests on.
+    expect(screen.getByText('Refund policy')).toBeInTheDocument();
+    expect(screen.getByText(/sending it is your decision/i)).toBeInTheDocument();
+    // Reading a draft sends nothing.
+    expect(writes).toHaveLength(0);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toEqual({
+      path: '/workspaces/w1/tickets/t1/messages/',
+      body: { body: DRAFT_WITH_SOURCE.draft_text, visibility: 'public_reply' },
+    });
+    expect(await screen.findByText('Reply sent.')).toBeInTheDocument();
+    // The text is cleared once it has become a reply, so it cannot be sent twice by accident.
+    expect(editor).toHaveValue('');
+    await expectNoAxeViolations();
+  });
+
+  it('warns when the draft rests on no knowledge article', async () => {
+    mockTicket({ ai: { draft: { ...DRAFT_WITH_SOURCE, source_articles: [] } } });
+
+    renderDetail();
+
+    expect(
+      await screen.findByText(/no knowledge article supports this draft/i),
+    ).toBeInTheDocument();
+  });
+
+  it('requests a draft and reports that it is queued', async () => {
+    const queued = {
+      ...DRAFT_WITH_SOURCE,
+      status: 'pending',
+      draft_text: '',
+      source_articles: [],
+    };
+    mockTicket({
+      ai: { draft: null },
+      onWrite: (path, method) => {
+        expect(method).toBe('POST');
+        expect(path).toBe('/workspaces/w1/tickets/t1/ai-draft/');
+        return queued;
+      },
+    });
+
+    renderDetail();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate draft' }));
+
+    expect(await screen.findByText(/waiting for a worker/i)).toBeInTheDocument();
+    // Still a draft, and still nothing sent.
+    expect(screen.queryByText('Reply sent.')).not.toBeInTheDocument();
   });
 });
 

@@ -87,7 +87,8 @@ export function LoadingPanel({ label }: { label?: string }) {
       spacing={1.5}
       sx={{ py: 6, color: 'text.secondary', alignItems: 'center' }}
     >
-      <CircularProgress size={28} />
+      {/* A progressbar needs its own name: the adjacent text is a sibling, not a label. */}
+      <CircularProgress size={28} aria-label={label ?? t('common.loading')} />
       <Typography variant="body2">{label ?? t('common.loading')}</Typography>
     </Stack>
   );

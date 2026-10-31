@@ -199,3 +199,77 @@ export async function createMessage(
     body: { body, visibility },
   });
 }
+
+/** The four states a background AI job reports (FR-024). */
+export const AI_JOB_STATUSES = ['pending', 'running', 'succeeded', 'failed'] as const;
+export type AIJobStatus = (typeof AI_JOB_STATUSES)[number];
+
+/** One cited article: an identifier the reader can resolve, and the title to show. */
+export interface DraftSource {
+  readonly article_id: string;
+  readonly title: string;
+}
+
+/**
+ * A reply draft, exactly as the contract returns it.
+ *
+ * `requires_human_approval` is always true: the field exists so the screen cannot treat a
+ * draft as a sent reply, and it is rendered rather than assumed.
+ */
+export interface ReplyDraft {
+  readonly id: string;
+  readonly status: AIJobStatus;
+  readonly draft_text: string;
+  readonly source_articles: readonly DraftSource[];
+  readonly provider: string;
+  readonly model: string;
+  readonly requires_human_approval: boolean;
+  readonly error: string | null;
+  readonly created_at: string;
+}
+
+/** The classification half of the status read; the panel shows the draft only. */
+export interface AIClassification {
+  readonly status: AIJobStatus;
+  readonly category: string;
+  readonly sentiment: string;
+  readonly suggested_priority: TicketPriority;
+  readonly confidence: number | null;
+  readonly rationale: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly created_at: string;
+}
+
+export interface AIStatus {
+  readonly classification: AIClassification | null;
+  readonly draft: ReplyDraft | null;
+}
+
+/**
+ * Both AI jobs for one ticket, in a single read.
+ *
+ * Either half may be null: a ticket has a classification before anyone asks for a draft, and
+ * an older ticket may have neither.
+ */
+export async function getAIStatus(
+  workspaceId: string,
+  ticketId: string,
+  signal?: AbortSignal,
+): Promise<AIStatus> {
+  return apiRequest<AIStatus>(`${ticketPath(workspaceId, ticketId)}ai-status/`, { signal });
+}
+
+/**
+ * Queue a draft for the ticket's current version, returning the job (`202`).
+ *
+ * The text arrives later, through the status read: a model call behind this request would
+ * make a slow provider visible as a slow screen. A second request while a draft is still
+ * running returns that job instead of paying for another.
+ */
+export async function requestDraft(workspaceId: string, ticketId: string): Promise<ReplyDraft> {
+  return apiRequest<ReplyDraft>(`${ticketPath(workspaceId, ticketId)}ai-draft/`, {
+    method: 'POST',
+    body: {},
+  });
+}

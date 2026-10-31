@@ -214,6 +214,28 @@
           "title": "Nothing here yet",
           "description": "Replies and internal notes on this ticket will appear here."
         }
+      },
+      "ai": {
+        "title": "AI reply draft",
+        "intro": "The assistant can draft a reply. It is a suggestion: review and edit it before you send it, and nothing is sent until you do.",
+        "generate": "Generate draft",
+        "regenerate": "Generate another",
+        "generating": "Generating a draft…",
+        "pending": "Waiting for a worker to pick this up.",
+        "refresh": "Check status",
+        "failed": "The draft could not be generated.",
+        "failedRetry": "Try again",
+        "reviewRequired": "This is a draft. Sending it is your decision.",
+        "sourcesTitle": "Sources",
+        "sourcesTotal": "Sources: {{total}}",
+        "noSources": "No knowledge article supports this draft. Check every claim before you send it.",
+        "editorLabel": "Draft reply",
+        "emptyEditor": "Write a reply before sending.",
+        "send": "Send reply",
+        "sending": "Sending…",
+        "sent": "Reply sent.",
+        "readOnly": "Your role can read drafts but not reply.",
+        "loading": "Loading the assistant's state…"
       }
     }
   },

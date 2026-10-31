@@ -21,6 +21,9 @@ export const queryKeys = {
     ['workspace', workspaceId, 'ticket', ticketId] as const,
   ticketMessages: (workspaceId: string, ticketId: string, page: number) =>
     ['workspace', workspaceId, 'ticket', ticketId, 'messages', { page }] as const,
+  /** The ticket's AI jobs; separate from the ticket so a draft poll never refetches it. */
+  ticketAIStatus: (workspaceId: string, ticketId: string) =>
+    ['workspace', workspaceId, 'ticket', ticketId, 'ai'] as const,
 };
 
 /** Prefixes for invalidating every cached page of a workspace-scoped collection. */

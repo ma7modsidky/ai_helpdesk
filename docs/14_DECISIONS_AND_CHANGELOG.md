@@ -478,6 +478,14 @@ Record material decisions using this template.
 ## Changelog
 Add dated entries as features or specs change. Keep this file concise; detailed implementation notes belong in pull requests.
 
+- 2026-10-31: AI panel on the ticket detail screen. Added `TicketAIPanel` with
+  generate/regenerate, queued, running, failed, and ready states, bounded polling (4s, 60 polls,
+  stopping on a terminal state), the draft in an editable field keyed by job id so a new job
+  cannot overwrite writing, cited source titles or a warning when no article supports the draft,
+  and an explicit send that posts the edited text through the existing message endpoint as a
+  public reply. Catalog keys in both locales; the panel is axe-clean in the detail screen's
+  accessibility test. Fixed `LoadingPanel`'s progressbar missing an accessible name.
+
 - 2026-10-31: T6.3 reply drafts: queued, cited, and never sent. Added `ReplyDraft` (per ticket
   version, status, attempts, provenance, text, validated citations), `drafts.py` (dispatch with
   in-flight dedupe, claim, success, class-only failure, supersede, latest reads), `sources.py`
