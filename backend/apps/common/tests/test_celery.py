@@ -20,8 +20,10 @@ from apps.common.logging import (
     RequestIdFilter,
     get_task_id,
 )
+from apps.common.models import TaskStatus
+from apps.common.task_records import register, start, succeed
 from apps.common.tasking import CorrelatedTask, enqueue
-from apps.common.tasks import ping
+from apps.common.tasks import ping, simulate_work
 from config.celery import app
 
 ATTEMPTS: list[int] = []
@@ -68,6 +70,8 @@ def _record() -> logging.LogRecord:
 
 class _RecordingTask:
     """A stand-in for a task object, so dispatch can be asserted without executing one."""
+
+    name = "apps.common.tasks.ping"
 
     def __init__(self) -> None:
         self.calls: list[tuple[object, ...]] = []
@@ -200,3 +204,70 @@ def test_enqueue_publishes_immediately_outside_a_transaction() -> None:
     enqueue(task, "ticket-2")
 
     assert task.calls == [("ticket-2",)]
+
+
+def _work_record(key: str) -> Any:
+    record, _ = register(task_name=simulate_work.name, idempotency_key=key)
+    return record
+
+
+def _field(record: logging.LogRecord, name: str) -> Any:
+    """Read a dynamically attached field, the way a log aggregator would."""
+    return getattr(record, name)
+
+
+@pytest.mark.django_db
+def test_simulated_work_records_its_success() -> None:
+    record = _work_record("sim-success")
+
+    assert simulate_work.delay(str(record.pk)).get() == "succeeded"
+
+    record.refresh_from_db()
+    assert record.status == TaskStatus.SUCCEEDED
+    assert record.result["attempt"] == 1
+
+
+@pytest.mark.django_db
+def test_a_duplicate_delivery_of_finished_work_is_skipped() -> None:
+    record = _work_record("sim-duplicate")
+    start(record)
+    succeed(record)
+
+    assert simulate_work.delay(str(record.pk)).get() == "skipped"
+
+    record.refresh_from_db()
+    # The duplicate ran nothing, so it did not consume an attempt.
+    assert record.attempts == 1
+
+
+@pytest.mark.django_db
+def test_a_simulated_failure_is_recorded_and_queued_for_retry() -> None:
+    record = _work_record("sim-failure")
+
+    with pytest.raises(Retry):
+        simulate_work.delay(str(record.pk), should_fail=True)
+
+    record.refresh_from_db()
+    assert record.status == TaskStatus.FAILED
+    assert record.last_error == "SimulatedTaskFailure"
+
+
+def test_a_task_run_logs_its_outcome_and_duration(
+    captured_logs: list[logging.LogRecord],
+) -> None:
+    ping.delay("logged").get()
+
+    outcomes = [
+        row
+        for row in captured_logs
+        if hasattr(row, "task_outcome") and _field(row, "task_outcome") == "succeeded"
+    ]
+    assert outcomes
+    record = outcomes[-1]
+    assert _field(record, "task_name") == "apps.common.tasks.ping"
+    assert _field(record, "task_duration_ms") >= 0
+
+    payload = json.loads(JsonFormatter().format(record))
+    assert payload["task_outcome"] == "succeeded"
+    assert payload["task_name"] == "apps.common.tasks.ping"
+    assert "task_duration_ms" in payload

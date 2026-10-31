@@ -18,6 +18,12 @@ Use a real test PostgreSQL database where feasible:
 - API permissions and serializers.
 - Celery task state changes.
 - Duplicate task delivery.
+
+Celery runs eagerly in the test settings (`CELERY_TASK_ALWAYS_EAGER`), so `task.delay(...).get()`
+executes in-process and the suite needs neither RabbitMQ nor a worker. The harness for a task test is
+three pieces: `TaskRecordFactory` (or `register()`), the `captured_logs` fixture, which installs a
+handler behind `RequestIdFilter` so `request_id`, `task_id`, and the structured task fields are
+assertable as an aggregator would see them, and the task's own record, re-read after the call.
 - Outbox publishing/consumption if implemented.
 
 ### API tests

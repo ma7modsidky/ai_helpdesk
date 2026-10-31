@@ -61,6 +61,13 @@ The end-to-end job does not start one either — nothing on a request path is qu
 - Health and readiness endpoints.
 - Error tracking with sensitive fields redacted.
 - Metrics: request latency/error rate, database connection/slow-query signals, queue depth/oldest message, task retries/failures/duration, AI latency/failure/cost estimates, SLA breaches.
+
+Task observability exists in two forms today (T5.4): every run emits one structured log line with
+`task_name`, `task_outcome` (`succeeded`, `failed`, `retried`) and `task_duration_ms` as separate JSON
+fields, and `manage.py task_status [--stale-minutes N] [--fail-on-stuck]` reports counts per status,
+the age of the oldest pending unit, and running work that stopped progressing. Both are broker-free,
+so an operator can answer "is work moving?" while the queue is the broken component. Queue depth,
+provider latency, and SLA-breach metrics remain deployment-level counters with no owner yet.
 - Alert on sustained worker failure or queue backlog, not just process liveness.
 
 ## Rollback

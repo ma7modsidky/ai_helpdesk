@@ -80,6 +80,19 @@ and no endpoint updates or deletes one. Indexes: `(workspace_id, created_at)` fo
 and `(object_type, object_id, created_at)` for one object's trail. Audit events are retained for 24
 months (ADR-025).
 
+### TaskRecord — background work (T5.2, ADR-033)
+`task_name`, `idempotency_key`, `status` (`pending`, `running`, `succeeded`, `failed`), `attempts`,
+`request_id`, `result` JSON, `last_error`, `created_at`, `updated_at`, `started_at`, `finished_at`.
+Unique constraint on `(task_name, idempotency_key)`; `CHECK` on status; indexes on
+`(status, created_at)` and `(task_name, -created_at)`.
+
+It is not a result backend: it records whether the work ran, how many attempts it took, and a small
+validated result. The dispatcher derives the idempotency key from the work itself
+(`ticket:<id>:classify:v<version>`), so a repeated HTTP request and a redelivered message converge on
+the same row. A worker claims a row only from `pending` or `failed`, so finished work is skipped and a
+retry is allowed. `last_error` stores the exception *class*, never its message, because a provider
+error can quote a credential or a customer's text.
+
 ### SLAPolicy
 `workspace_id`, `name`, `priority`, `first_response_minutes`, `is_active`, policy/version timestamps. MVP uses elapsed minutes unless business-hours support is explicitly implemented.
 
@@ -133,6 +146,8 @@ User ──< Membership >── Workspace
 - AI-generated text is a draft and cannot become a public message without an explicit authorized action.
 - Knowledge retrieval applies tenant and publication filters before returning candidates.
 - Escalation and notification actions are deduplicated.
+- Background work is identified by `(task_name, idempotency_key)`; duplicate dispatch, duplicate
+delivery, and two workers racing all leave one row and one completed execution.
 - Audit events are append-only at the application layer.
 - Database constraints protect uniqueness and referential invariants where feasible.
 

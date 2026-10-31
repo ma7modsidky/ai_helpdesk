@@ -276,6 +276,39 @@ Record material decisions using this template.
 - **Consequences:** Every new screen after T4.12 must land with both catalogs, its direction-matrix coverage and its axe assertion, or the gates stop covering it — which is why `08_IMPLEMENTATION_PLAN.md` states that rule for T6.4, T7.6 and T8.5. A third locale becomes a catalog plus a direction entry rather than a refactor. Contrast has to be reviewed twice, in both themes. The Arabic copy in these catalogs is authored during implementation and must be reviewed by a native speaker before any demo or public deployment; it is not machine-translated at runtime. `latn` numerals are a product decision that a future locale may revisit. Emails remain English. Because the locale is client-only, two devices can show the same account in different languages, which is intentional.
 - **Verification:** a catalog-parity test over `en`/`ar`; a direction-matrix test rendering each screen component in both directions; axe assertions in both directions; formatter tests for `Intl` output and `latn` numerals; T4.12 runs the end-to-end journey once per direction and asserts `dir="rtl"` and that no catalog key leaks as a raw identifier; T9.5 records screenshots in both locales and both themes.
 
+### ADR-033: Task state in the database, idempotency by key
+- **Status:** accepted
+- **Date:** 2026-10-31
+- **Context:** ADR-032 left every task without a record of what ran, how often, and with what
+  outcome, and D-08 had been open since the Phase 2 audit: the contract asks for "idempotency keys
+  where duplicate execution would be harmful" but names no header or store. Celery's `acks_late`
+  makes duplicate delivery normal, so a task that writes twice is a correctness bug waiting for a
+  worker restart.
+- **Decision:** Every unit of work has a `TaskRecord` (T5.2) unique on `(task_name,
+  idempotency_key)`. The dispatcher derives the key from the work itself
+  (`ticket:<id>:classify:v<version>`) and calls `dispatch_once`; a second call with the same key
+  queues nothing and returns `None`. The worker claims the row with a conditional update from
+  `pending` or `failed`: finished work is skipped, a retry is allowed, and two workers receiving the
+  same message cannot both claim it. `last_error` stores the exception class only; `result` holds a
+  small validated payload, not a transcript. The table is the only task-state store — there is no
+  result backend — and an HTTP `Idempotency-Key` header is **not** adopted in the MVP, because the
+  only duplicate-execution risks today are queue deliveries, which the task key already covers.
+- **Alternatives:** The contract's literal reading — `Idempotency-Key` plus a
+  `(workspace, key, endpoint)` row storing the response — would make a repeated `POST` replay its
+  first response, which no client needs yet and which adds a second state machine per endpoint.
+  Relying on natural keys (`ticket_id`) instead of a derived key would make "reclassify after an
+  edit" silently a no-op. A Redis result backend would answer "did it run?" until a restart, which
+  is exactly when the question matters.
+- **Consequences:** A dispatcher has to name its work; there is no default key, because a wrong
+  default would either suppress real work or run it twice. Re-running failed work deliberately needs
+  a new key or a Celery retry, not a re-dispatch — `failed` is a state the operator sees, not a
+  queue. `TaskRecord` grows with every dispatched unit, so T9.6's retention policy must cover it.
+- **Verification:** `apps/common/tests/test_task_records.py` covers one row per key, a refused
+  second claim while running, an allowed retry after failure, a refused claim after success, the
+  exception-class-only error field, one queued message per key, and the request id copied from the
+  dispatcher; `test_celery.py` covers a duplicate delivery being skipped and a failure being
+  recorded and requeued; `test_task_command.py` covers the status report and `--fail-on-stuck`.
+
 ### ADR-032: Celery wiring and task conventions
 - **Status:** accepted
 - **Date:** 2026-10-31
@@ -316,6 +349,18 @@ Record material decisions using this template.
 
 ## Changelog
 Add dated entries as features or specs change. Keep this file concise; detailed implementation notes belong in pull requests.
+
+- 2026-10-31: T5.2–T5.4 task state, harness, and observability, completing Phase 5. Added
+  `apps.common.models.TaskRecord` (unique on `(task_name, idempotency_key)`, `CHECK` on status,
+  indexes for the status report) and `apps/common/task_records.py`: `register`, `dispatch_once`
+  (one message per key, after commit), `begin`/`start` (a conditional claim that refuses finished
+  work and running duplicates but allows a retry), `succeed`, `fail` (exception class only), and
+  `summary`. `simulate_work` is the slow/failing task the conventions are exercised with, logged as
+  one structured outcome line per run (`task_name`, `task_outcome`, `task_duration_ms`), and
+  `manage.py task_status [--stale-minutes] [--fail-on-stuck]` reports counts, backlog age, and stuck
+  work without touching the broker. The test harness is the eager runner plus a `captured_logs`
+  fixture behind `RequestIdFilter` and `TaskRecordFactory`. D-08 is settled by ADR-033: task-level
+  keys, no HTTP `Idempotency-Key` header in the MVP. 553 tests, 98.03% branch coverage.
 
 - 2026-10-31: T5.1 Celery and RabbitMQ, the start of Phase 5. `config/celery.py` configures Celery
   from Django's `CELERY_` settings with autodiscovery from every installed app's `tasks.py`;

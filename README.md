@@ -127,7 +127,17 @@ uv run python manage.py runserver
   ```
 
   `apps.common.tasks.ping` is the smoke task: queue it and the worker log line carries both
-  the message and a `task_id`. The automated tests run tasks eagerly, so CI needs no broker.
+  the message and a `task_id`. `apps.common.tasks.simulate_work` is the slow/failing one used to
+  exercise retries and the status report. The automated tests run tasks eagerly, so CI needs no
+  broker.
+- Background-work state (T5.2–T5.4): every unit of work has a `TaskRecord` row, unique on
+  `(task_name, idempotency_key)`. The dispatcher derives the key from the work itself
+  (`ticket:<id>:classify:v<version>`), so a repeated request, a Celery redelivery, and two workers
+  racing converge on one row and one execution; a worker claims the row only from `pending` or
+  `failed`, so finished work is skipped and a retry is allowed. `last_error` records the exception
+  class, never its message. Each run logs `task_name`, `task_outcome`, and `task_duration_ms` as
+  fields, and `uv run python manage.py task_status` reports counts, the oldest pending unit, and
+  running work that stopped progressing (`--fail-on-stuck` exits non-zero for a monitor).
 - Health checks: `GET /health/live/` reports the process is up (200). `GET /health/ready/`
   reports required dependency readiness (200, or 503 with `{"status": "unavailable"}` and no
   internal detail when PostgreSQL is unreachable).

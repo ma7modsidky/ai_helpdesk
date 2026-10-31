@@ -22,6 +22,11 @@ from datetime import UTC, datetime
 REQUEST_ID_ABSENT = "-"
 TASK_ID_ABSENT = "-"
 
+# Fields a caller attaches with ``extra=`` and that must survive into the JSON line. An
+# allowlist rather than "every extra": log lines are shipped to an aggregator, and an
+# arbitrary key is a way to leak a request body into it by accident.
+STRUCTURED_FIELDS = ("task_name", "task_outcome", "task_duration_ms")
+
 _request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
 _task_id: ContextVar[str | None] = ContextVar("task_id", default=None)
 
@@ -84,6 +89,11 @@ class JsonFormatter(logging.Formatter):
         if record.stack_info:
             payload["stack"] = self.formatStack(record.stack_info)
 
+        for field in STRUCTURED_FIELDS:
+            value = getattr(record, field, None)
+            if value is not None:
+                payload[field] = value
+
         return json.dumps(payload, ensure_ascii=False, default=str)
 
 
@@ -99,3 +109,12 @@ class ConsoleFormatter(logging.Formatter):
             datefmt="%H:%M:%S",
             defaults={"request_id": REQUEST_ID_ABSENT, "task_id": TASK_ID_ABSENT},
         )
+
+    def format(self, record: logging.LogRecord) -> str:
+        line = super().format(record)
+        outcome = getattr(record, "task_outcome", None)
+        if outcome is None:
+            return line
+        # The JSON handler carries these as fields; a human reading a console needs them
+        # spelled out, and the message alone would not say which task or how long.
+        return f"{line} (task={getattr(record, 'task_name', '-')} outcome={outcome})"

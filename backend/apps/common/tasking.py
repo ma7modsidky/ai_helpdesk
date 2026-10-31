@@ -20,6 +20,7 @@ import time
 from typing import Any, Protocol
 
 from celery.app.task import Task
+from celery.exceptions import Retry
 from django.db import transaction
 
 from apps.common.logging import TASK_ID_ABSENT, reset_task_id, set_task_id
@@ -28,7 +29,9 @@ logger = logging.getLogger(__name__)
 
 
 class Runnable(Protocol):
-    """Anything with Celery's ``delay`` signature, so tests can pass a stand-in."""
+    """Anything with Celery's name and ``delay`` signature, so tests can pass a stand-in."""
+
+    name: str
 
     def delay(self, *args: Any, **kwargs: Any) -> Any: ...
 
@@ -41,20 +44,49 @@ class CorrelatedTask(Task):  # type: ignore[type-arg]
     Installed through ``CELERY_TASK_CLS``, so this applies to tasks that never mention it.
     The reset happens in ``finally``: a worker process reuses the context for the next task,
     and a leaked ID would attribute one task's log lines to another.
+
+    Each run also emits one structured outcome line — task name, outcome, duration — because
+    "how long does this take and how often does it fail" is otherwise only answerable by
+    reading every task's code. The fields are separate keys in the JSON line so a log-based
+    metric can aggregate them without parsing prose.
     """
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         token = set_task_id(self.request.id or TASK_ID_ABSENT)
         started = time.monotonic()
         try:
-            return super().__call__(*args, **kwargs)
+            result = super().__call__(*args, **kwargs)
+        except Retry:
+            # Not a failure: the task asked to run again later.
+            self._log_outcome(outcome="retried", started=started)
+            raise
+        except Exception as exc:
+            self._log_outcome(outcome="failed", started=started, error=exc)
+            raise
+        else:
+            self._log_outcome(outcome="succeeded", started=started)
+            return result
         finally:
-            logger.debug(
-                "Task %s finished in %sms.",
-                type(self).name,
-                round((time.monotonic() - started) * 1000, 1),
-            )
             reset_task_id(token)
+
+    def _log_outcome(
+        self, *, outcome: str, started: float, error: BaseException | None = None
+    ) -> None:
+        """One line per run, with the fields a metric or an alert would read."""
+        duration_ms = round((time.monotonic() - started) * 1000, 1)
+        suffix = f" ({type(error).__name__})" if error is not None else ""
+        logger.info(
+            "Task %s %s in %sms%s.",
+            self.name,
+            outcome,
+            duration_ms,
+            suffix,
+            extra={
+                "task_name": self.name,
+                "task_outcome": outcome,
+                "task_duration_ms": duration_ms,
+            },
+        )
 
 
 def enqueue(task: Runnable, /, *args: object, **kwargs: object) -> None:
