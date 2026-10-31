@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from django.urls import path
 
+from apps.ai_assistant.views import TicketAIStatusView, TicketDraftView
+
 from .views import (
     TicketAssignView,
     TicketDetailView,
@@ -26,4 +28,6 @@ urlpatterns = [
         TicketMessageListCreateView.as_view(),
         name="ticket-messages",
     ),
+    path("<uuid:ticket_id>/ai-draft/", TicketDraftView.as_view(), name="ticket-ai-draft"),
+    path("<uuid:ticket_id>/ai-status/", TicketAIStatusView.as_view(), name="ticket-ai-status"),
 ]

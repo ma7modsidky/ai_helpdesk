@@ -129,6 +129,9 @@ REST_FRAMEWORK = {
         # Ticket creation is the only ticket route that adds rows on demand, so
         # it is the only one that needs a client-level ceiling.
         "ticket_create": "120/hour",
+        # A draft costs a provider call, so it is limited per client like the other endpoints
+        # that spend money (10_SECURITY). Status reads are not throttled: polling is cheap.
+        "ai_generation": "60/hour",
     },
 }
 

@@ -31,5 +31,6 @@ REST_FRAMEWORK = {
         "invitation_create": _E2E_UNTHROTTLED,
         "invitation_accept": _E2E_UNTHROTTLED,
         "ticket_create": _E2E_UNTHROTTLED,
+        "ai_generation": _E2E_UNTHROTTLED,
     },
 }

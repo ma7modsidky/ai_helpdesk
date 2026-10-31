@@ -276,6 +276,50 @@ Record material decisions using this template.
 - **Consequences:** Every new screen after T4.12 must land with both catalogs, its direction-matrix coverage and its axe assertion, or the gates stop covering it — which is why `08_IMPLEMENTATION_PLAN.md` states that rule for T6.4, T7.6 and T8.5. A third locale becomes a catalog plus a direction entry rather than a refactor. Contrast has to be reviewed twice, in both themes. The Arabic copy in these catalogs is authored during implementation and must be reviewed by a native speaker before any demo or public deployment; it is not machine-translated at runtime. `latn` numerals are a product decision that a future locale may revisit. Emails remain English. Because the locale is client-only, two devices can show the same account in different languages, which is intentional.
 - **Verification:** a catalog-parity test over `en`/`ar`; a direction-matrix test rendering each screen component in both directions; axe assertions in both directions; formatter tests for `Intl` output and `latn` numerals; T4.12 runs the end-to-end journey once per direction and asserts `dir="rtl"` and that no catalog key leaks as a raw identifier; T9.5 records screenshots in both locales and both themes.
 
+### ADR-036: Drafts are queued, cited, and never sent
+- **Status:** accepted
+- **Date:** 2026-10-31
+- **Context:** T6.3 adds the first AI output a customer could plausibly receive. The contract
+  already names `POST .../ai-draft/` and `GET .../ai-status/` and says a draft must never send a
+  public message; what it does not say is where the draft lives, how a citation is checked, or
+  what a request does while another is still running. The knowledge base (T7.1/T7.2) does not exist
+  yet, so retrieval has no articles to offer.
+- **Decision:** `ReplyDraft` rows hold the job and its text, keyed by the ticket version the prompt
+  read. `POST .../ai-draft/` returns `202` with the job and queues the work; a second request while
+  a draft for the same version is pending or running returns that job instead of paying for
+  another, and asking again after an edit or a failure is allowed because both are legitimate.
+  `GET .../ai-status/` returns the newest classification and draft with their states, so a client
+  polls one endpoint with a bound. The response always carries `requires_human_approval: true` and
+  `error` as an exception class only. Retrieval is a seam (`sources.candidates_for`) that returns
+  nothing until Phase 7; its result is what the model is offered *and* the only set a citation may
+  come from, so an invented or foreign source id fails the draft rather than being dropped. Only
+  public replies enter the prompt: internal notes are staff commentary and must not return as a
+  customer-facing draft. Drafting takes `tickets.comment` (it exists to produce a reply) and the
+  `ai_generation` throttle, while the status read takes `tickets.view`. Sending is untouched:
+  `POST .../messages/` remains the only way to publish, and no new send endpoint was added
+  (ADR-002).
+- **Alternatives:** Generating inline in the request was rejected: a provider call behind an HTTP
+  request turns a slow vendor into a slow endpoint and a timeout into a 500. Auto-sending a draft as
+  a public reply was rejected outright by ADR-002. Citing sources without validating them was
+  rejected because the check is the whole defense against a fabricated or cross-tenant reference.
+  Dropping unknown ids instead of failing was rejected: the draft would then look grounded while its
+  reference had been silently removed. Storing article bodies with the draft was rejected because
+  the knowledge base owns that text and a copy would go stale. Reusing `TaskRecord.result` for the
+  draft was rejected for the same reasons as in ADR-035. A unique key per ticket version was
+  rejected because regeneration is a supported action, not a duplicate.
+- **Consequences:** Until Phase 7 every draft is ungrounded: there are no sources, the prompt says
+  so, and the UI must state that the draft is not based on available documentation (FR-035). That
+  limitation is a property of the MVP, not a bug to paper over. Each edit costs another provider
+  call if a person asks for a new draft. Citations are identifiers and titles only, so a reader
+  resolves them against the knowledge base rather than against a stale copy.
+- **Verification:** `apps/ai_assistant/tests/test_draft_api.py` asserts `202` with no message
+  created, a completed draft with its text, provenance, and resolved citations, the classification
+  half of the status read, 404 for an unknown ticket and for a non-member, the CSRF refusal, an
+  in-flight request returning the running job, a new draft after an edit, a citation that was not
+  retrieved failing the job with `AIResponseInvalid`, ticket text unable to close its block,
+  internal notes excluded from the prompt, superseded work skipping the model, a timeout left for
+  retry, duplicate delivery skipped, and throttling at the configured rate.
+
 ### ADR-035: A strict classification schema, and a job row per ticket version
 - **Status:** accepted
 - **Date:** 2026-10-31
@@ -433,6 +477,15 @@ Record material decisions using this template.
 
 ## Changelog
 Add dated entries as features or specs change. Keep this file concise; detailed implementation notes belong in pull requests.
+
+- 2026-10-31: T6.3 reply drafts: queued, cited, and never sent. Added `ReplyDraft` (per ticket
+  version, status, attempts, provenance, text, validated citations), `drafts.py` (dispatch with
+  in-flight dedupe, claim, success, class-only failure, supersede, latest reads), `sources.py`
+  (tenant-scoped retrieval seam, empty until Phase 7), the `draft-v1` prompt (sources offered,
+  conversation bounded to public replies, no-source fallback), `parse_draft` (citation must be in
+  the retrieved set, text bounded), the `draft_reply` task, and the two endpoints
+  `POST .../ai-draft/` (`202`, `tickets.comment`, `ai_generation` throttle) and `GET
+  .../ai-status/` (`tickets.view`). Recorded ADR-036. 640 tests, 97.69% branch coverage.
 
 - 2026-10-31: T6.2 AI classification, the first untrusted output to reach stored data. Added
   `apps/ai_assistant/schemas.py` (strict five-key contract, allowlisted sentiment, priority drawn

@@ -129,3 +129,78 @@ class TicketClassification(models.Model):
 
     def __str__(self) -> str:
         return f"classification {self.ticket_id} v{self.ticket_version} ({self.status})"
+
+
+class ReplyDraft(models.Model):
+    """One draft-generation job, and the text it produced.
+
+    Unlike a classification this row is not unique per version: asking again after an edit, or
+    after a failure, is a legitimate thing to do. ``drafts.request_draft`` refuses a second job
+    while one for the same version is pending or running, so the table can hold history without
+    letting a double click pay for two answers.
+
+    ``source_articles`` stores identifiers and titles only — the cited set that the validator
+    checked — never article bodies, which belong to the knowledge base and would go stale here.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "organizations.Workspace",
+        on_delete=models.CASCADE,
+        related_name="ai_drafts",
+    )
+    ticket = models.ForeignKey(
+        "tickets.Ticket",
+        on_delete=models.CASCADE,
+        related_name="drafts",
+    )
+    ticket_version = models.PositiveIntegerField(
+        help_text="The ticket version this draft was written for.",
+    )
+    prompt_version = models.CharField(max_length=PROMPT_VERSION_MAX)
+    status = models.CharField(
+        max_length=16,
+        choices=TaskStatus.choices,
+        default=TaskStatus.PENDING,
+    )
+    attempts = models.PositiveSmallIntegerField(default=0)
+    provider = models.CharField(max_length=PROVIDER_MAX, blank=True, default="")
+    model = models.CharField(max_length=MODEL_MAX, blank=True, default="")
+    latency_ms = models.FloatField(null=True, blank=True)
+    draft_text = models.TextField(blank=True, default="")
+    source_articles = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Validated citations as [{'article_id', 'title'}]; never article bodies.",
+    )
+    last_error = models.CharField(
+        max_length=ERROR_CLASS_MAX,
+        blank=True,
+        default="",
+        help_text="Exception class of the last failed attempt; never its message.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "id")
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=TaskStatus.values),
+                name="reply_draft_status_is_known",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(ticket_version__gte=1),
+                name="reply_draft_version_is_positive",
+            ),
+        ]
+        indexes = [
+            # The status endpoint reads the newest draft for one ticket.
+            models.Index(fields=("ticket", "-created_at"), name="draft_ticket_idx"),
+            models.Index(fields=("workspace", "status", "created_at"), name="draft_ws_status_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"draft {self.ticket_id} v{self.ticket_version} ({self.status})"

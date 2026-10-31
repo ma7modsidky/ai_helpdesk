@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any
 
@@ -153,3 +154,65 @@ def _rationale(value: Any) -> str:
     if not rationale or len(rationale) > RATIONALE_MAX:
         raise AIResponseInvalid("rationale must be one short sentence.")
     return rationale
+
+
+# --- Reply drafts ---------------------------------------------------------
+
+DRAFT_TEXT_MAX = 8000
+DRAFT_SOURCE_IDS_MAX = 5
+
+_DRAFT_KEYS = frozenset({"draft_text", "source_ids"})
+
+
+@dataclass(frozen=True)
+class Draft:
+    """A validated reply draft and the source ids it may cite."""
+
+    text: str
+    source_ids: tuple[str, ...]
+
+
+def parse_draft(text: str, *, candidate_ids: Collection[str]) -> Draft:
+    """Parse one draft response, checking every citation against what was retrieved.
+
+    A citation that is not in ``candidate_ids`` is refused rather than dropped, because that is
+    exactly the failure the check exists for: an invented source, or an article from another
+    workspace that the model could not legitimately have seen (10_SECURITY). Dropping it would
+    leave a plausible-looking draft with a silently falsified reference.
+    """
+    payload = _load_object(text)
+
+    missing = _DRAFT_KEYS - payload.keys()
+    unknown = payload.keys() - _DRAFT_KEYS
+    if missing or unknown:
+        raise AIResponseInvalid("The draft did not match the expected schema.")
+
+    return Draft(
+        text=_draft_text(payload["draft_text"]),
+        source_ids=_source_ids(payload["source_ids"], candidate_ids),
+    )
+
+
+def _draft_text(value: Any) -> str:
+    if not isinstance(value, str):
+        raise AIResponseInvalid("draft_text must be a string.")
+    draft_text = value.strip()
+    if not draft_text or len(draft_text) > DRAFT_TEXT_MAX:
+        raise AIResponseInvalid("draft_text must be non-empty and at most 8000 characters.")
+    return draft_text
+
+
+def _source_ids(value: Any, candidate_ids: Collection[str]) -> tuple[str, ...]:
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise AIResponseInvalid("source_ids must be a list of strings.")
+
+    cited: list[str] = []
+    for source_id in value:
+        if source_id not in candidate_ids:
+            raise AIResponseInvalid("The draft cited a source that was not retrieved.")
+        if source_id not in cited:
+            cited.append(source_id)
+
+    if len(cited) > DRAFT_SOURCE_IDS_MAX:
+        raise AIResponseInvalid("The draft cited too many sources.")
+    return tuple(cited)
