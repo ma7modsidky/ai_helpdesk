@@ -31,6 +31,19 @@ if SECRET_KEY == _SECRET_PLACEHOLDER:
 if not DATABASES["default"]["PASSWORD"]:  # noqa: F405
     raise ImproperlyConfigured("POSTGRES_PASSWORD is required outside development.")
 
+# A shared cache is a security requirement here, not a performance one: LocMem throttling is
+# per process, so a multi-process deployment would allow each client the full rate on every
+# worker. A broker URL is required for the same reason in reverse — a queue pointed at a
+# default localhost broker accepts tasks no worker will ever read.
+DJANGO_CACHE_URL = require("DJANGO_CACHE_URL")
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": DJANGO_CACHE_URL,
+    }
+}
+CELERY_BROKER_URL = require("CELERY_BROKER_URL")
+
 # HTTPS and transport hardening.
 SECURE_SSL_REDIRECT = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

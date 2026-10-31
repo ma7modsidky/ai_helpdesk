@@ -29,6 +29,8 @@ _SAFE_PROD_ENV = {
     "DJANGO_SECRET_KEY": "prod-secret-value-used-only-in-tests",
     "DJANGO_ALLOWED_HOSTS": "helpdesk.example.com",
     "POSTGRES_PASSWORD": "prod-db-password-used-only-in-tests",
+    "DJANGO_CACHE_URL": "redis://127.0.0.1:6379/1",
+    "CELERY_BROKER_URL": "amqp://guest:guest@127.0.0.1:5672//",
 }
 
 
@@ -36,7 +38,7 @@ def _run_prod_probe(overrides: dict[str, str | None]) -> subprocess.CompletedPro
     env = {
         key: value
         for key, value in os.environ.items()
-        if not key.startswith(("DJANGO_", "POSTGRES_"))
+        if not key.startswith(("DJANGO_", "POSTGRES_", "CELERY_"))
     }
     env.update({key: value for key, value in _SAFE_PROD_ENV.items()})
     for key, value in overrides.items():
@@ -104,6 +106,20 @@ def test_prod_refuses_missing_database_password() -> None:
 
     assert result.returncode != 0
     assert "POSTGRES_PASSWORD" in result.stderr
+
+
+def test_prod_refuses_missing_cache_url() -> None:
+    result = _run_prod_probe({"DJANGO_CACHE_URL": None})
+
+    assert result.returncode != 0
+    assert "DJANGO_CACHE_URL" in result.stderr
+
+
+def test_prod_refuses_missing_broker_url() -> None:
+    result = _run_prod_probe({"CELERY_BROKER_URL": None})
+
+    assert result.returncode != 0
+    assert "CELERY_BROKER_URL" in result.stderr
 
 
 @pytest.mark.parametrize("secret", ["prod-secret-value-used-only-in-tests"])

@@ -70,7 +70,10 @@ uv run python manage.py runserver
   `DJANGO_SECRET_KEY`, empty `DJANGO_ALLOWED_HOSTS`, or a missing database password.
   `DJANGO_CSRF_TRUSTED_ORIGINS` lists origins allowed to send CSRF-protected requests when
   the SPA is served from a different origin than the API; it stays empty for the same-origin
-  deployment described above.
+  deployment described above. Production also requires `DJANGO_CACHE_URL` (Redis) and
+  `CELERY_BROKER_URL`: LocMem throttling is per process, so without a shared cache each API
+  worker would allow every client the full rate, and a task queued to a default local
+  broker is accepted by nobody.
 - `DJANGO_SETTINGS_MODULE` defaults to `config.settings.dev` for `manage.py` and to
   `config.settings.prod` for WSGI/ASGI entry points.
 - Host ports for the local datastores are configurable (`POSTGRES_PORT`, `REDIS_PORT`,
@@ -106,6 +109,25 @@ uv run python manage.py runserver
   validated status transitions (agents may resolve, managers and above may reopen, `closed` is
   terminal), and public replies versus internal notes. Every write appends a `TicketEvent` audit row;
   creation is throttled at 120 per hour per client.
+- Background tasks (T5.1): Celery is configured in `config/celery.py` and reads its
+  settings from the `CELERY_` namespace, so a deployment has one configuration surface.
+  RabbitMQ is the broker (`CELERY_BROKER_URL`), and there is deliberately **no result
+  backend** — durable task state belongs in the database (T5.2), so nothing depends on a
+  result a worker restart would lose. Defaults: `acks_late` with
+  `reject_on_worker_lost` (a killed worker redelivers instead of dropping, so every task
+  must be safe to run twice), three retries at 30 seconds by default, and 120/180 second
+  soft/hard time limits. `apps.common.tasking.enqueue` publishes only after the surrounding
+  transaction commits, and every task log line carries a `task_id` (`CorrelatedTask`), which
+  is the task-side counterpart of `request_id`. Run the processes without a container:
+
+  ```bash
+  cd backend
+  uv run celery -A config worker --loglevel=info   # --pool=solo on Windows
+  uv run celery -A config beat --loglevel=info     # the schedule is empty until T8.3
+  ```
+
+  `apps.common.tasks.ping` is the smoke task: queue it and the worker log line carries both
+  the message and a `task_id`. The automated tests run tasks eagerly, so CI needs no broker.
 - Health checks: `GET /health/live/` reports the process is up (200). `GET /health/ready/`
   reports required dependency readiness (200, or 503 with `{"status": "unavailable"}` and no
   internal detail when PostgreSQL is unreachable).

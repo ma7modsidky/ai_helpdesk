@@ -42,6 +42,10 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "drf_spectacular",
+    # Installed for its tasks and middleware rather than its models: Celery discovers tasks
+    # from `apps/<app>/tasks.py` in installed apps only, so `apps.common.tasks` is invisible
+    # to the worker unless the app is registered (T5.1).
+    "apps.common",
     "apps.accounts",
     "apps.organizations",
     "apps.tickets",
@@ -158,6 +162,62 @@ EMAIL_TIMEOUT = 10
 # Used to build the accept link in invitation emails. The API returns the relative
 # ``accept_path`` instead, so no deployment-specific URL leaks into responses.
 FRONTEND_BASE_URL = env_str("FRONTEND_BASE_URL", default="http://localhost:5173")
+
+
+# --- Background tasks -----------------------------------------------------
+# RabbitMQ carries task messages and Celery executes them (ADR-004, ADR-032). The app itself
+# is configured in `config/celery.py`; everything here is read through the CELERY_ namespace.
+
+CELERY_BROKER_URL = env_str("CELERY_BROKER_URL", default="amqp://guest:guest@127.0.0.1:5672//")
+
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+# No result backend: durable task state belongs in the database (T5.2). A second store of
+# what a task did can only disagree with the first.
+CELERY_RESULT_BACKEND = None
+CELERY_TASK_IGNORE_RESULT = True
+# `acks_late` acknowledges after execution, so a worker killed mid-task gets the message
+# redelivered rather than losing it — every task therefore has to be safe to run twice.
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+# Bounded retries: an unbounded loop turns one provider outage into a queue flood.
+CELERY_TASK_MAX_RETRIES = 3
+CELERY_TASK_DEFAULT_RETRY_DELAY = 30
+# A hung task must not hold a worker slot indefinitely.
+CELERY_TASK_SOFT_TIME_LIMIT = 120
+CELERY_TASK_TIME_LIMIT = 180
+# One message in flight per worker process, so a slow task cannot starve the queue, and a
+# periodic child restart bounds the damage from any leak.
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 200
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+# The task base class (correlation IDs, one place for task-wide behaviour) is assigned in
+# `config/celery.py`: Celery does not read `task_cls` from the settings namespace.
+# No periodic task exists yet; T8.3 adds the SLA deadline sweep here.
+CELERY_BEAT_SCHEDULE: dict[str, dict[str, object]] = {}
+CELERY_TIMEZONE = "UTC"
+
+# --- Cache ----------------------------------------------------------------
+# Throttle counters live in the cache, and LocMem is per process: two API processes would
+# each allow the full rate. Development and tests may run without Redis; production may not
+# (prod.py refuses to start without a URL), and tests always use LocMem so a developer's
+# local Redis cannot make the suite depend on it.
+
+if CACHE_URL := env_str("DJANGO_CACHE_URL"):
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": CACHE_URL,
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "resolveai-local",
+        }
+    }
 
 
 # --- Database -------------------------------------------------------------

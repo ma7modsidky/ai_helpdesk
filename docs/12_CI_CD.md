@@ -33,6 +33,10 @@ second run inside the same hour for reasons the journey does not assert. Throttl
 the backend tests, which drive each scope to its ceiling; the end-to-end module only raises it, and is
 never a deployment configuration.
 
+No broker service is required in CI: the test settings run Celery tasks eagerly (T5.1), so the
+asynchronous path is exercised in-process and `pytest` depends on neither RabbitMQ nor a worker.
+The end-to-end job does not start one either — nothing on a request path is queued yet.
+
 ## Main branch / release pipeline
 
 - Require successful CI and code review.

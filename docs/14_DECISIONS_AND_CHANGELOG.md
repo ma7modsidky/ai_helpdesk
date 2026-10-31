@@ -276,8 +276,58 @@ Record material decisions using this template.
 - **Consequences:** Every new screen after T4.12 must land with both catalogs, its direction-matrix coverage and its axe assertion, or the gates stop covering it — which is why `08_IMPLEMENTATION_PLAN.md` states that rule for T6.4, T7.6 and T8.5. A third locale becomes a catalog plus a direction entry rather than a refactor. Contrast has to be reviewed twice, in both themes. The Arabic copy in these catalogs is authored during implementation and must be reviewed by a native speaker before any demo or public deployment; it is not machine-translated at runtime. `latn` numerals are a product decision that a future locale may revisit. Emails remain English. Because the locale is client-only, two devices can show the same account in different languages, which is intentional.
 - **Verification:** a catalog-parity test over `en`/`ar`; a direction-matrix test rendering each screen component in both directions; axe assertions in both directions; formatter tests for `Intl` output and `latn` numerals; T4.12 runs the end-to-end journey once per direction and asserts `dir="rtl"` and that no catalog key leaks as a raw identifier; T9.5 records screenshots in both locales and both themes.
 
+### ADR-032: Celery wiring and task conventions
+- **Status:** accepted
+- **Date:** 2026-10-31
+- **Context:** Phase 5 starts the asynchronous path. AI classification and drafts (Phase 6), article
+  indexing (Phase 7), and SLA sweeps (Phase 8) all run outside a request. ADR-004 fixes RabbitMQ as
+  the broker and Redis for explicitly chosen cache use, but nothing yet said where task state lives,
+  how a task is retried, how it correlates with the work that queued it, or whether it may be
+  published before its transaction commits.
+- **Decision:** Celery is configured once in `config/celery.py`, reading Django settings through the
+  `CELERY_` namespace, with autodiscovery from `apps/<app>/tasks.py`. There is no result backend
+  (`result_backend` unset, `task_ignore_result` on): durable task state is a database row (T5.2), so
+  no process depends on a result a worker restart would lose. Every task inherits
+  `apps.common.tasking.CorrelatedTask`, which binds the Celery task ID to the logging context for the
+  duration of the run — the task-side counterpart of `request_id`. Retries are bounded at three with
+  a 30-second default delay and per-task backoff; `acks_late` with `reject_on_worker_lost` makes a
+  killed worker redeliver rather than drop, which is why every task must be idempotent.
+  `enqueue()` publishes with `transaction.on_commit`, never inside an open transaction. A shared Redis
+  cache (`DJANGO_CACHE_URL`) lands with this task: optional locally, required in production, because
+  LocMem throttling is per process.
+- **Alternatives:** A Redis result backend would let callers poll `AsyncResult`, but it duplicates the
+  audit trail in a store that empties on restart; a database row keeps one record and is what the UI
+  needs to render processing states. Publishing at call time and retrying on failure is simpler than
+  `on_commit`, but a worker can then read a row that a rollback deletes. A separate Celery
+  configuration file would drift from Django's environment handling. Using `DjangoTransactionTask`
+  from the Celery docs was rejected as more machinery than the MVP needs.
+- **Consequences:** A task has no return value its caller can read; anything that must survive must
+  be written by the task itself (T5.2). Anything enqueued has to be idempotent, because duplicate
+  delivery is normal rather than exceptional. Development still needs only PostgreSQL: tasks run
+  eagerly in tests and the cache falls back to LocMem, and `prod.py` refuses to start without a broker
+  and a cache URL. The Compose worker and Beat services still wait on the backend image (T9.1), so
+  today both are started by hand.
+- **Verification:** `apps/common/tests/test_celery.py` asserts that the broker and task class come
+  from settings, that discovery finds the smoke task, that a retryable failure becomes a `Retry`
+  carrying its cause and that the bound re-raises instead of looping, that the task ID reaches the
+  log record and the JSON line, and that `enqueue` publishes only after commit;
+  `test_settings.py` asserts production refuses to start without `DJANGO_CACHE_URL` or
+  `CELERY_BROKER_URL`.
+
 ## Changelog
 Add dated entries as features or specs change. Keep this file concise; detailed implementation notes belong in pull requests.
+
+- 2026-10-31: T5.1 Celery and RabbitMQ, the start of Phase 5. `config/celery.py` configures Celery
+  from Django's `CELERY_` settings with autodiscovery from every installed app's `tasks.py`;
+  `apps/common/tasking.py` adds `CorrelatedTask` (binds the task ID to the logging context, installed
+  as the app's task class so a new task inherits it) and `enqueue()` (`transaction.on_commit`, so a
+  worker never reads a row a rollback removes); `apps/common/tasks.py` adds the `ping` smoke task
+  whose log line proves broker → worker → logs. `apps/common/logging.py` gained `task_id` alongside
+  `request_id` in both formatters, closing FR-051's task half. The shared cache D-13 was waiting for
+  arrives too: `DJANGO_CACHE_URL` selects Redis, LocMem otherwise, tests always LocMem, and
+  production now refuses to start without it or without `CELERY_BROKER_URL`. 530 tests, 98.19%
+  branch coverage; a worker started locally against RabbitMQ answered `inspect ping` and ran the
+  smoke task.
 
 - 2026-10-31: T4.11 closeout, the last two items Phase 4 was missing. The no-hardcoded-copy rule is
   now a local ESLint rule (`frontend/eslint-rules/no-hardcoded-copy.js`): it fails on JSX text and on
