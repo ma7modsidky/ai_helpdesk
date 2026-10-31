@@ -158,7 +158,7 @@ with a delayed fuse, because Phase 3's table references it.
 | FR-013/FR-014 reply vs note separation | T3.4 | planned (note authority settled — ADR-021) |
 | FR-015 append-only audit stream | T3.5 | planned (vocabulary undecided — D-07) |
 | FR-016 pagination, filtering, ordering | T3.2 | planned; query contract settled (ordering allowlist, `assignee`, search bounds — ADR-023) |
-| FR-020–FR-027 AI assistant | T6.1–T6.6 | planned |
+| FR-020–FR-027 AI assistant | T6.1–T6.6 | planned — T6.1 landed the provider adapter and the deterministic fake (ADR-034); classification, drafts, and the UI follow |
 | FR-030–FR-035 knowledge base | T7.1–T7.5 | planned (T7.3 leaves full-text vs `pgvector` open) |
 | FR-040–FR-045 SLA | T8.1–T8.5 | planned (FR-044 unowned — §3) |
 | FR-050 health/readiness | T1.2 | met |

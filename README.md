@@ -138,6 +138,17 @@ uv run python manage.py runserver
   class, never its message. Each run logs `task_name`, `task_outcome`, and `task_duration_ms` as
   fields, and `uv run python manage.py task_status` reports counts, the oldest pending unit, and
   running work that stopped progressing (`--fail-on-stuck` exits non-zero for a monitor).
+- AI provider (T6.1): every model call goes through
+  `apps.ai_assistant.providers.AIProvider`, which takes a prompt and returns text plus
+  `provider`, `model`, and `latency_ms`. `AI_PROVIDER` selects the adapter (default `fake`),
+  `AI_MODEL` names the model, and `AI_REQUEST_TIMEOUT_SECONDS` bounds a call. Only the
+  deterministic fake ships today: the same prompt produces the same text with no network and no
+  key, so tests and the offline demo are reproducible. Failures are modelled by type —
+  `AIProviderTimeout`, `AIProviderUnavailable`, and `AIProviderRateLimited` are retryable;
+  `AIResponseInvalid` is not, because the same prompt fails the same way. Adapter messages never
+  quote the prompt, which contains ticket text. Adding a vendor is one class implementing
+  `AIProvider` plus one entry in `_PROVIDERS`; its credential is read from the environment by
+  that adapter and stays in the backend process.
 - Health checks: `GET /health/live/` reports the process is up (200). `GET /health/ready/`
   reports required dependency readiness (200, or 503 with `{"status": "unavailable"}` and no
   internal detail when PostgreSQL is unreachable).

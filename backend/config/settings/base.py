@@ -10,7 +10,7 @@ from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 
-from config.env import env_list, env_str
+from config.env import env_int, env_list, env_str
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     # to the worker unless the app is registered (T5.1).
     "apps.common",
     "apps.accounts",
+    "apps.ai_assistant",
     "apps.organizations",
     "apps.tickets",
 ]
@@ -162,6 +163,24 @@ EMAIL_TIMEOUT = 10
 # Used to build the accept link in invitation emails. The API returns the relative
 # ``accept_path`` instead, so no deployment-specific URL leaks into responses.
 FRONTEND_BASE_URL = env_str("FRONTEND_BASE_URL", default="http://localhost:5173")
+
+
+# --- AI assistant ---------------------------------------------------------
+# The adapter is selected by name, so a test, a developer, and a deployment run the same code
+# against different providers (ADR-034). Only the deterministic fake ships in the MVP: it needs
+# no network and no credential, which is what keeps CI offline and reproducible. A vendor's
+# key is read from the environment by that adapter and never reaches the browser or a task
+# message (10_SECURITY).
+
+AI_PROVIDER = env_str("AI_PROVIDER", default="fake") or "fake"
+AI_MODEL = env_str("AI_MODEL", default="fake-model-v1") or "fake-model-v1"
+
+# A zero or negative timeout would mean "give up immediately", which reads like a provider
+# outage in every log line rather than a configuration mistake.
+_AI_TIMEOUT_SECONDS = env_int("AI_REQUEST_TIMEOUT_SECONDS", default=20)
+if _AI_TIMEOUT_SECONDS is None or _AI_TIMEOUT_SECONDS <= 0:
+    raise ImproperlyConfigured("AI_REQUEST_TIMEOUT_SECONDS must be a positive integer.")
+AI_REQUEST_TIMEOUT_SECONDS = _AI_TIMEOUT_SECONDS
 
 
 # --- Background tasks -----------------------------------------------------

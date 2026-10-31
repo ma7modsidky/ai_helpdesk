@@ -276,6 +276,43 @@ Record material decisions using this template.
 - **Consequences:** Every new screen after T4.12 must land with both catalogs, its direction-matrix coverage and its axe assertion, or the gates stop covering it — which is why `08_IMPLEMENTATION_PLAN.md` states that rule for T6.4, T7.6 and T8.5. A third locale becomes a catalog plus a direction entry rather than a refactor. Contrast has to be reviewed twice, in both themes. The Arabic copy in these catalogs is authored during implementation and must be reviewed by a native speaker before any demo or public deployment; it is not machine-translated at runtime. `latn` numerals are a product decision that a future locale may revisit. Emails remain English. Because the locale is client-only, two devices can show the same account in different languages, which is intentional.
 - **Verification:** a catalog-parity test over `en`/`ar`; a direction-matrix test rendering each screen component in both directions; axe assertions in both directions; formatter tests for `Intl` output and `latn` numerals; T4.12 runs the end-to-end journey once per direction and asserts `dir="rtl"` and that no catalog key leaks as a raw identifier; T9.5 records screenshots in both locales and both themes.
 
+### ADR-034: One provider adapter, fake first
+- **Status:** accepted
+- **Date:** 2026-10-31
+- **Context:** Phase 6 is the first code that calls a model. Two failure modes follow from doing
+  that naively: a test suite that needs a key and a network (so CI is neither offline nor
+  deterministic), and prompt-construction logic tangled with one vendor's request format (so the
+  fourth provider is a rewrite). `05_AI_AND_RAG_SPEC.md` already requires an adapter, explicit
+  timeouts, bounded retries, and a fake provider for tests; nothing yet said what the interface is
+  or where the retry decision lives.
+- **Decision:** A single narrow interface, `AIProvider.complete(CompletionRequest) -> Completion`,
+  with `name`, `model`, and `timeout_seconds` on the adapter. Prompts and output schemas are built
+  by the calling code (T6.2), so the adapter knows nothing about tickets. Errors are modelled by
+  type and carry a `retryable` flag: timeout, unavailable, and rate-limited are transient;
+  `AIResponseInvalid` is permanent, because the same prompt fails the same way. Adapter messages are
+  written in `providers.py` and never copy provider text, which can quote the prompt. The provider
+  is selected by `AI_PROVIDER` from a name registry, and the deterministic `FakeAIProvider` is the
+  only adapter in the MVP — scripted responses and an injectable failure make both the happy and
+  the failure paths testable, with no network and no credential.
+- **Alternatives:** Calling a vendor SDK directly from the task is less code now and couples
+  classification, drafts, and evaluation to that vendor. A single `generate(prompt) -> str` interface
+  would hide provenance and latency, which FR-026 requires storing. Auto-retrying inside the adapter
+  was rejected: the task owner decides what a duplicate execution means (ADR-033), and an adapter
+  that sleeps holds a worker slot without the queue knowing. Shipping a real vendor in this task was
+  rejected because CI must not need a key, and a fake that returns fixed text would make every
+  downstream test vacuous.
+- **Consequences:** Classification and drafts are validated in application code, so a provider that
+  returns plausible prose but bad JSON fails safely (T6.2). The demo and CI run entirely on the fake
+  adapter, which means the MVP demonstrates the flow rather than the model's quality; evaluation
+  fixtures (T6.6) and any real adapter remain out of scope until then, and that limitation must be
+  stated rather than glossed. A real adapter's key is read from the environment inside the backend
+  process and is never a build-time variable.
+- **Verification:** `apps/ai_assistant/tests/test_providers.py` asserts selection and unknown-name
+  failure, determinism across instances, scripted ordering, error typing and retryability, that error
+  text never contains the prompt, that a completion reports provenance and latency, and that the fake
+  provider works with `socket` disabled; `test_settings.py` asserts a non-positive timeout fails at
+  import.
+
 ### ADR-033: Task state in the database, idempotency by key
 - **Status:** accepted
 - **Date:** 2026-10-31
@@ -349,6 +386,16 @@ Record material decisions using this template.
 
 ## Changelog
 Add dated entries as features or specs change. Keep this file concise; detailed implementation notes belong in pull requests.
+
+- 2026-10-31: T6.1 AI provider adapter and deterministic fake, the start of Phase 6. Added
+  `apps/ai_assistant` with `providers.py`: the `AIProvider` protocol (`complete(CompletionRequest) ->
+  Completion`, plus `name`, `model`, `timeout_seconds`), typed request/result dataclasses carrying
+  provenance and latency, modelled errors with a `retryable` contract (timeout, unavailable,
+  rate-limited retryable; invalid output permanent), the deterministic `FakeAIProvider` with scripted
+  responses and an injectable failure, and a name registry behind `AI_PROVIDER`. Settings add
+  `AI_PROVIDER`, `AI_MODEL`, and `AI_REQUEST_TIMEOUT_SECONDS` (fail-fast on a non-positive value);
+  no credential is read anywhere, so CI stays offline. Recorded ADR-034. 569 tests, 98.06% branch
+  coverage.
 
 - 2026-10-31: T5.2–T5.4 task state, harness, and observability, completing Phase 5. Added
   `apps.common.models.TaskRecord` (unique on `(task_name, idempotency_key)`, `CHECK` on status,
