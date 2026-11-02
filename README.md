@@ -141,9 +141,10 @@ uv run python manage.py runserver
 - AI provider (T6.1): every model call goes through
   `apps.ai_assistant.providers.AIProvider`, which takes a prompt and returns text plus
   `provider`, `model`, and `latency_ms`. `AI_PROVIDER` selects the adapter (default `fake`),
-  `AI_MODEL` names the model, and `AI_REQUEST_TIMEOUT_SECONDS` bounds a call. Only the
-  deterministic fake ships today: the same prompt produces the same text with no network and no
-  key, so tests and the offline demo are reproducible. Failures are modelled by type —
+  `AI_MODEL` names the model, and `AI_REQUEST_TIMEOUT_SECONDS` bounds a call. Two adapters ship:
+  the deterministic fake — the same prompt produces the same text with no network and no key, so
+  tests stay reproducible — and `gemini` for manual testing, which reads `GEMINI_API_KEY` from the
+  environment and sends it in a header. Failures are modelled by type —
   `AIProviderTimeout`, `AIProviderUnavailable`, and `AIProviderRateLimited` are retryable;
   `AIResponseInvalid` is not, because the same prompt fails the same way. Adapter messages never
   quote the prompt, which contains ticket text. Adding a vendor is one class implementing
@@ -152,6 +153,50 @@ uv run python manage.py runserver
 - Health checks: `GET /health/live/` reports the process is up (200). `GET /health/ready/`
   reports required dependency readiness (200, or 503 with `{"status": "unavailable"}` and no
   internal detail when PostgreSQL is unreachable).
+
+### One command instead of three shells
+
+`scripts/dev.sh` boots the whole local stack: it starts PostgreSQL, Redis and RabbitMQ with
+Compose, waits for PostgreSQL, installs the locked backend dependencies, applies migrations, then
+runs the API, a Celery worker, and the Vite dev server in one terminal. Ctrl+C stops all three and
+leaves the containers and their data in place.
+
+```bash
+./scripts/dev.sh        # or: bash scripts/dev.sh
+```
+
+It copies `.env.example` to `.env` on a first run if there is none. The worker matters: an AI
+classification or a draft is queued work, so without a worker the panel stays queued forever —
+which is the mistake a single command removes.
+
+It refuses to start when port 8000 or 5173 is already taken rather than half-starting, and the API
+runs with `--noreload`: the autoreloader is a second process that also holds the port, so leaving
+it on would strand a listener after Ctrl+C. Restart the script after a backend change; the frontend
+still hot-reloads.
+
+### Pointing the AI at a real model
+
+`AI_PROVIDER=fake` is deterministic and needs no key, which is why tests and CI use it. Its output
+is a hash, not JSON, so the schema rejects it: with the fake, the AI panel only ever shows its
+failure state. To see real classification and drafts, use Gemini's free tier.
+
+1. Create a key at <https://aistudio.google.com/apikey>. The free tier needs no billing account.
+2. Set three values in `.env`:
+
+   ```bash
+   AI_PROVIDER=gemini
+   AI_MODEL=gemini-3.5-flash-lite    # or gemini-3.8-flash for stronger drafts
+   GEMINI_API_KEY=your-key-here
+   ```
+
+3. Restart `./scripts/dev.sh`, create a ticket, and open it. The suggestion and the draft arrive
+   through the worker within a few seconds.
+
+Free-tier calls are rate limited, and both tasks retry a bounded number of times, so a burst of
+tickets can leave a job `failed`; the panel offers to retry it. The key is read by the backend
+process only, and travels in a request header — never in a URL, a log line, or the browser. Groq,
+OpenRouter's free models, or a local Ollama each need one more `AIProvider` class plus one entry
+in `_PROVIDERS`.
 
 Quality checks (run from `backend/`):
 

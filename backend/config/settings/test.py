@@ -25,6 +25,12 @@ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
+# Tests never reach a real model, whatever the developer's .env says. CI has no key, and a
+# suite whose result depends on a provider's mood is not a suite; the adapter's own cases
+# inject their opener instead.
+AI_PROVIDER = "fake"
+AI_MODEL = "fake-model-v1"
+
 # Tasks run inline, in the calling thread: CI needs no broker, and a test that queues work
 # can assert what the task did without waiting on a worker. `EAGER_PROPAGATES` turns a task
 # failure into a test failure instead of a result object nobody checks.

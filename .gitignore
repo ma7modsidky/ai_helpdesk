@@ -33,3 +33,6 @@ frontend/e2e/.seed-state.json
 .idea/
 .DS_Store
 Thumbs.db
+
+# Celery worker pidfile written by scripts/dev.sh
+backend/.celery-dev.pid

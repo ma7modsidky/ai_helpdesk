@@ -475,8 +475,51 @@ Record material decisions using this template.
   `test_settings.py` asserts production refuses to start without `DJANGO_CACHE_URL` or
   `CELERY_BROKER_URL`.
 
+### ADR-037: A real adapter for manual testing, and one command for the stack
+- **Status:** accepted
+- **Date:** 2026-11-02
+- **Context:** Phase 6 is complete, but every AI path is exercised only through the deterministic
+  fake. Its output is a hash rather than JSON, so the schema rejects it by design: the panel can
+  show its failure state and nothing else, and manual review of classification or drafts is
+  impossible. Running the stack also takes three shells — datastores, API, worker, SPA — and the
+  worker is the one people forget, which looks like a hung panel rather than a missing process.
+- **Decision:** Add `GeminiAIProvider` beside the fake behind the same `AIProvider` protocol: one
+  `POST` to the documented `generateContent` method, the key read from `GEMINI_API_KEY` by the
+  backend process and sent as `x-goog-api-key` (never in a URL, because URLs reach logs), the model
+  from `AI_MODEL`, HTTP status mapped onto the existing error types so retryability stays a
+  property of the type, and blocked or empty output rejected as `AIResponseInvalid`. Standard
+  library only, with the opener injected so a test answers without a socket. Selecting `gemini`
+  while `AI_MODEL` still names the fake fails at startup instead of on every call. `scripts/dev.sh`
+  starts the datastores, waits for PostgreSQL, migrates, and runs the API, the worker, and Vite
+  under one trap.
+- **Alternatives:** A vendor SDK (rejected: one HTTP request does not justify a dependency and a
+  second release cadence, and its exceptions would be re-mapped anyway). Teaching the fake to emit
+  schema-valid JSON (rejected: it would blur what the fake is for, and a demo would appear to work
+  while showing invented policy). A `Makefile` (rejected as a second syntax over one script).
+- **Consequences:** `gemini` is the only real adapter; Groq, OpenRouter, or Ollama are each one more
+  class plus one registry entry. Free-tier limits mean a legitimate `failed` job, which the panel
+  already offers to retry. CI keeps running on the fake, so it stays offline and needs no secret.
+  The script serves the API with `--noreload` and refuses a busy port: on Windows the python or
+  node process behind `uv run`/`pnpm` is invisible to Git Bash's `ps` and cannot be signalled, so
+  the only reliable stop is one known listener per port, closed by port at exit. A backend change
+  therefore needs a script restart; the frontend still hot-reloads.
+- **Verification:** `apps/ai_assistant/tests/test_providers.py` covers text extraction, the
+  header/URL split, timeout (direct and wrapped), unreachable host, rate limit, server error, a
+  non-retryable rejection that does not quote the response body, blocked and empty output, selection
+  by name with the key from the environment, a missing key, and the fake-model guard.
+
 ## Changelog
 Add dated entries as features or specs change. Keep this file concise; detailed implementation notes belong in pull requests.
+
+- 2026-11-02: Real AI provider for manual testing, and one command for the stack. Added
+  `GeminiAIProvider` (`AI_PROVIDER=gemini`) over the documented `generateContent` REST method: the
+  key comes from `GEMINI_API_KEY` in the backend process and travels in `x-goog-api-key`, never in
+  a URL; statuses map onto the existing error types so retryability stays a property of the type;
+  blocked or empty output is `AIResponseInvalid`; a non-JSON body is rejected without being echoed.
+  Standard library only, with an injected opener so no test opens a socket, and selecting `gemini`
+  while `AI_MODEL` still names the fake fails at startup. `scripts/dev.sh` starts the datastores,
+  waits for PostgreSQL, migrates, and runs the API, a worker, and Vite in one terminal. `.env.example`
+  and the README explain the free-tier setup. Recorded ADR-037.
 
 - 2026-10-31: Classification suggestion beside the draft, with an accept action. Added
   `ClassificationSummary` to the AI panel: category, sentiment, suggested priority, and the
