@@ -158,12 +158,14 @@ describe('TicketInboxPage', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'New ticket' }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.type(within(dialog).getByLabelText(/^Subject/), 'Missing invoice');
-    await userEvent.type(
-      within(dialog).getByLabelText(/^Description/),
-      'The March invoice is missing.',
-    );
-    await userEvent.type(within(dialog).getByLabelText(/^Requester email/), 'customer@example.com');
+    // Pasted rather than typed key by key: the dialog re-renders on every keystroke, and under
+    // coverage instrumentation the field-by-field version took longer than the test timeout.
+    await userEvent.click(within(dialog).getByLabelText(/^Subject/));
+    await userEvent.paste('Missing invoice');
+    await userEvent.click(within(dialog).getByLabelText(/^Description/));
+    await userEvent.paste('The March invoice is missing.');
+    await userEvent.click(within(dialog).getByLabelText(/^Requester email/));
+    await userEvent.paste('customer@example.com');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {

@@ -229,6 +229,103 @@ describe('KnowledgePage', () => {
     });
   });
 
+  it('archives a published article and says it is no longer indexed', async () => {
+    mockedRequest.mockImplementation((path: string, options?: { method?: string }) => {
+      if (options?.method === 'POST' && path.endsWith('/publish/')) {
+        return Promise.resolve({
+          ...ARTICLE,
+          status: 'archived',
+          index_status: 'pending',
+          chunk_count: 0,
+        });
+      }
+      return Promise.resolve(PAGE([ARTICLE]));
+    });
+
+    renderKnowledge();
+    await userEvent.click(await screen.findByRole('button', { name: 'Refund policy' }));
+
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Archive' }));
+
+    await waitFor(() => {
+      expect(mockedRequest).toHaveBeenCalledWith('/workspaces/w1/articles/a1/publish/', {
+        method: 'POST',
+        body: { status: 'archived' },
+      });
+    });
+    expect(within(dialog).getByText('Archived')).toBeInTheDocument();
+    // Archiving means retrieval stops, and the editor says so instead of leaving a chunk count.
+    expect(
+      await within(dialog).findByText(/not indexed because the article is not published/i),
+    ).toBeInTheDocument();
+  });
+
+  it('offers a reindex after a failed job and reports the new job state', async () => {
+    const FAILED = {
+      ...ARTICLE,
+      index_status: 'failed',
+      indexed_version: 0,
+      index_error: 'IndexError',
+    };
+    mockedRequest.mockImplementation((path: string, options?: { method?: string }) => {
+      if (options?.method === 'POST' && path.endsWith('/reindex/')) {
+        return Promise.resolve({ ...FAILED, index_status: 'pending', index_error: '' });
+      }
+      return Promise.resolve(PAGE([FAILED]));
+    });
+
+    renderKnowledge();
+    await userEvent.click(await screen.findByRole('button', { name: 'Refund policy' }));
+
+    const dialog = await screen.findByRole('dialog');
+    // The failure is stated with its exception class, which is all the server stores.
+    expect(within(dialog).getByText(/the last attempt failed \(IndexError\)/i)).toBeInTheDocument();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Reindex' }));
+
+    await waitFor(() => {
+      expect(mockedRequest).toHaveBeenCalledWith('/workspaces/w1/articles/a1/reindex/', {
+        method: 'POST',
+        body: {},
+      });
+    });
+    expect(await within(dialog).findByText('Queued')).toBeInTheDocument();
+    expect(within(dialog).queryByText(/the last attempt failed/i)).not.toBeInTheDocument();
+  });
+
+  it("pages with the server's next link rather than slicing the loaded page", async () => {
+    mockedRequest.mockImplementation((path: string) => {
+      if (path.includes('page=2')) {
+        return Promise.resolve({
+          count: 26,
+          next: null,
+          previous: 'https://example.test/page=1',
+          results: [DRAFT],
+        });
+      }
+      return Promise.resolve({
+        count: 26,
+        next: 'https://example.test/page=2',
+        previous: null,
+        results: [ARTICLE],
+      });
+    });
+
+    renderKnowledge();
+    expect(await screen.findByText('Refund policy')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    await waitFor(() => {
+      expect(mockedRequest).toHaveBeenCalledWith(
+        '/workspaces/w1/articles/?page=2&page_size=25',
+        expect.anything(),
+      );
+    });
+    expect(await screen.findByText('Shipping times')).toBeInTheDocument();
+  });
+
   it('renders the Arabic screen with translated labels', async () => {
     mockedRequest.mockResolvedValue(PAGE([ARTICLE]));
 
