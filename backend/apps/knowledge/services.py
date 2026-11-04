@@ -116,8 +116,18 @@ def update_article(
     return article
 
 
-def set_publication(*, access: WorkspaceAccess, article_id: UUID, status: str) -> KnowledgeArticle:
-    """Publish or archive an article, queueing the indexing job either way."""
+def set_publication(
+    *,
+    access: WorkspaceAccess,
+    article_id: UUID,
+    status: str,
+    enqueue_indexing: bool = True,
+) -> KnowledgeArticle:
+    """Publish or archive an article, queueing the indexing job either way.
+
+    ``enqueue_indexing=False`` is for a caller that indexes in its own process immediately (the
+    seed command): the article state is still set here, so publishing has one implementation.
+    """
     article = get_article(access=access, article_id=article_id)
     if status == ArticleStatus.ARCHIVED and article.status == ArticleStatus.ARCHIVED:
         raise ArticleStateConflict("This article is already archived.")
@@ -141,7 +151,8 @@ def set_publication(*, access: WorkspaceAccess, article_id: UUID, status: str) -
     with transaction.atomic():
         KnowledgeArticle.objects.filter(pk=article.pk).update(**fields)
         article.refresh_from_db()
-        enqueue_index(article)
+        if enqueue_indexing:
+            enqueue_index(article)
     return article
 
 

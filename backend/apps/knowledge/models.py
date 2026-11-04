@@ -33,9 +33,11 @@ TITLE_MAX = 200
 BODY_MAX = 20_000
 ERROR_CLASS_MAX = 100
 
-# PostgreSQL's built-in text-search configuration. Named in one place because the indexing
-# vector and the retrieval query must use the same one, or nothing ever matches.
-SEARCH_CONFIG = "english"
+# The text-search configurations the corpus is indexed and queried with (ADR-039). The product
+# ships an English and an Arabic interface, so articles and tickets arrive in both languages and
+# PostgreSQL has no single configuration that handles a mixed corpus: each of these is applied to
+# the same text and the resulting lexemes are concatenated into one vector.
+SEARCH_CONFIGS = ("english", "arabic")
 
 
 class ArticleStatus(models.TextChoices):

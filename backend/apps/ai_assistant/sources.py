@@ -20,13 +20,16 @@ inventing a policy (FR-035).
 
 from __future__ import annotations
 
+import operator
 import re
 from dataclasses import dataclass
+from functools import reduce
+from typing import Any
 
 from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.db.models import F
 
-from apps.knowledge.models import SEARCH_CONFIG, ArticleStatus, KnowledgeChunk
+from apps.knowledge.models import SEARCH_CONFIGS, ArticleStatus, KnowledgeChunk
 from apps.tickets.models import Ticket
 
 # Retrieval stays small and predictable: the model sees a handful of chunks, not a corpus
@@ -40,8 +43,10 @@ MAX_QUERY_CHARS = 1_000
 MAX_QUERY_TERMS = 24
 
 # Only these characters survive into the query. The ticket is untrusted text, and PostgreSQL's
-# query syntax has operators of its own, so the words are extracted rather than escaped.
-_TERM = re.compile(r"[a-z0-9]+")
+# query syntax has operators of its own, so the words are extracted rather than escaped. Unicode
+# letters are kept on purpose: an ASCII-only pattern reduced an Arabic ticket to an empty query,
+# which made "no sources" look like an answer instead of a bug (ADR-039).
+_TERM = re.compile(r"[^\W_]+")
 
 
 @dataclass(frozen=True)
@@ -78,7 +83,13 @@ def candidates_for(*, ticket: Ticket) -> list[Source]:
     terms = list(dict.fromkeys(_TERM.findall(text.lower())))[:MAX_QUERY_TERMS]
     if not terms:
         return []
-    query = SearchQuery(" | ".join(terms), config=SEARCH_CONFIG, search_type="raw")
+    joined = " | ".join(terms)
+    # One query per configured language, OR-ed together: the stored vector carries the lexemes of
+    # both (ADR-039), so a ticket finds an article in either language.
+    query: Any = reduce(
+        operator.or_,
+        (SearchQuery(joined, config=config, search_type="raw") for config in SEARCH_CONFIGS),
+    )
     rows = (
         KnowledgeChunk.objects.filter(
             workspace_id=ticket.workspace_id,

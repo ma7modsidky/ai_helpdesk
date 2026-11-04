@@ -11,6 +11,9 @@ is gone or the new one is complete.
 
 from __future__ import annotations
 
+import operator
+from functools import reduce
+from typing import Any
 from uuid import UUID
 
 from django.contrib.postgres.search import SearchVector
@@ -24,7 +27,7 @@ from apps.common.tasking import enqueue
 from .chunking import split_body
 from .models import (
     ERROR_CLASS_MAX,
-    SEARCH_CONFIG,
+    SEARCH_CONFIGS,
     ArticleStatus,
     KnowledgeArticle,
     KnowledgeChunk,
@@ -33,6 +36,21 @@ from .models import (
 # How many chunks a reindex rewrites per bulk insert. Small enough to keep the statement
 # bounded, large enough that a normal article is one round trip.
 _BULK_SIZE = 100
+
+
+def _vector(*, title: str) -> Any:
+    """One vector carrying the lexemes of every configured language (ADR-039).
+
+    PostgreSQL applies a single dictionary per vector, so a bilingual corpus needs the text
+    stemmed once per configuration; concatenating the results puts both sets of lexemes in the
+    one column the GIN index covers. Each configuration numbers positions from 1, which makes a
+    combined rank an approximation — enough to choose five chunks from a small corpus.
+    """
+    parts: list[Any] = [
+        SearchVector(Value(title), Value(" "), "content", config=config)
+        for config in SEARCH_CONFIGS
+    ]
+    return reduce(operator.add, parts)
 
 
 class ArticleNotFound(LookupError):
@@ -108,12 +126,7 @@ def replace_chunks(article: KnowledgeArticle) -> int:
         # refunds, even if the body never repeats the word.
         for chunk in created:
             KnowledgeChunk.objects.filter(pk=chunk.pk).update(
-                search_vector=SearchVector(
-                    Value(article.title),
-                    Value(" "),
-                    "content",
-                    config=SEARCH_CONFIG,
-                )
+                search_vector=_vector(title=article.title)
             )
     return len(chunks)
 

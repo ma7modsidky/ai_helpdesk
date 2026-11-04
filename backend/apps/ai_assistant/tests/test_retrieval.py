@@ -45,6 +45,24 @@ def test_retrieval_returns_published_chunks_from_the_ticket_workspace() -> None:
     assert sources[0].id == str(article.chunks.get().pk)
 
 
+def test_an_arabic_ticket_retrieves_an_arabic_article() -> None:
+    workspace = WorkspaceFactory.create()
+    article = indexed_article(
+        workspace=workspace,
+        title="سياسة استرداد المبالغ المكررة",
+        body="يتم رد المبلغ المكرر إلى وسيلة الدفع الأصلية خلال خمسة أيام عمل.",
+    )
+    ticket = TicketFactory.create(
+        workspace=workspace,
+        subject="خصم مكرر على البطاقة",
+        description="تم خصم المبلغ مرتين وأريد استرداد المبلغ المكرر.",
+    )
+
+    sources = candidates_for(ticket=ticket)
+
+    assert [source.article_id for source in sources] == [str(article.pk)]
+
+
 def test_a_draft_article_is_not_retrievable() -> None:
     workspace = WorkspaceFactory.create()
     indexed_article(workspace=workspace, status=ArticleStatus.DRAFT)

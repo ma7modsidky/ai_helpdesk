@@ -54,6 +54,40 @@ def test_the_title_is_part_of_what_retrieval_matches() -> None:
     ).exists()
 
 
+def test_an_arabic_article_is_searchable_with_the_arabic_configuration() -> None:
+    article = ArticleFactory.create(
+        workspace=WorkspaceFactory.create(),
+        title="سياسة استرداد المبالغ المكررة",
+        body="يتم رد المبلغ المكرر إلى وسيلة الدفع الأصلية خلال خمسة أيام عمل.",
+        status=ArticleStatus.PUBLISHED,
+    )
+
+    index_article(str(article.pk))
+
+    assert KnowledgeChunk.objects.filter(
+        article=article, search_vector=SearchQuery("المكررة", config="arabic")
+    ).exists()
+
+
+def test_one_vector_carries_the_lexemes_of_every_language() -> None:
+    article = ArticleFactory.create(
+        workspace=WorkspaceFactory.create(),
+        title="Refund and استرداد policy",
+        body="Refunds take five days. يتم الرد خلال خمسة أيام.",
+        status=ArticleStatus.PUBLISHED,
+    )
+
+    index_article(str(article.pk))
+
+    chunk = article.chunks.get()
+    assert KnowledgeChunk.objects.filter(
+        pk=chunk.pk, search_vector=SearchQuery("refund", config="english")
+    ).exists()
+    assert KnowledgeChunk.objects.filter(
+        pk=chunk.pk, search_vector=SearchQuery("الرد", config="arabic")
+    ).exists()
+
+
 def test_indexing_a_draft_article_stores_nothing() -> None:
     article = indexed_article(workspace=WorkspaceFactory.create())
     assert article.chunks.exists()

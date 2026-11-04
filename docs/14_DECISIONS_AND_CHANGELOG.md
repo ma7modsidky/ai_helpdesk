@@ -556,9 +556,11 @@ Record material decisions using this template.
   characters bound the prompt cost well enough. Automatic task retries were rejected: they
   would hide a bug behind a loop, and the failure is already visible where a person can act on
   it.
-- **Consequences:** The `english` search configuration stems English text only, so an Arabic
-  article is matched on exact words rather than stems — acceptable while the seeded corpus is
-  English, and the reason T7.3 chose keyword search rather than promising semantic recall. A
+- **Consequences:** The single `english` search configuration shipped here stemmed English text
+  only, and the ASCII term extractor dropped Arabic words entirely, so an Arabic ticket produced
+  no query at all; ADR-039 replaced both with one vector and one query per configured language,
+  and this remains keyword search rather than semantic recall, which is why T7.3 left embeddings
+  out. A
   published article is briefly published-but-not-retrievable while its job runs, and the editor
   says so; that window is the cost of not indexing inside the request. Chunking by characters
   rather than tokens makes prompt size approximate, so the retrieval bound is the real ceiling.
@@ -574,8 +576,63 @@ Record material decisions using this template.
   archived article is invisible, that another workspace's article never matches, that the
   no-source case degrades safely, and that ticket text cannot inject a query operator.
 
+### ADR-039: One vector and one query per configured language
+- **Status:** accepted
+- **Date:** 2026-11-04
+- **Context:** The product ships an English and an Arabic interface, but retrieval picked
+  PostgreSQL's `english` configuration for the stored vector and for the query, and extracted
+  query terms with `[a-z0-9]+`. A manual test made the consequence concrete: an Arabic ticket
+  (`زيادة سعر التوصيل`) returned no sources at all while six published articles existed, because
+  the extractor reduced the subject and description to an empty term list and returned early.
+  Arabic articles were equally unreachable from any ticket, which made the bilingual UI a promise
+  the retrieval could not keep (05 §2, FR-032). PostgreSQL applies one dictionary per
+  `tsvector`, and it has no configuration that indexes several languages at once.
+- **Decision:** `SEARCH_CONFIGS = ("english", "arabic")` names the configurations in one place.
+  Indexing builds one `SearchVector` per configuration over the article title and the chunk body
+  and concatenates them (`tsvector || tsvector`) into the existing `search_vector` column, so both
+  sets of lexemes live in the row the existing `GIN` index covers. Retrieval builds one
+  `SearchQuery` per configuration from the same sanitized terms and ORs them, which is what makes
+  a ticket match an article in either language without detecting what language either is in. Term
+  extraction now keeps Unicode letters and digits (`[^\W_]+`) rather than ASCII, which both admits
+  Arabic and still removes every `tsquery` operator, so the injection defence is unchanged.
+  Migration `knowledge.0002` rebuilds the stored vectors of existing rows, because a vector is
+  derived data and a migration cannot queue the reindex that would otherwise be needed. The seeded
+  corpus gained one Arabic refund article so the Arabic demo has a source to cite.
+- **Alternatives:** A second column and index per locale was rejected: two sources of truth, a
+  merge step in every query, and the caller still has to search both, since an article and a
+  ticket can be in different languages. Detecting the ticket's script and using one configuration
+  was rejected: the stored vector would still need both stemmings, and script detection is a
+  heuristic that misfires on the mixed text real tickets contain (a product name in Latin script
+  inside an Arabic sentence). Running everything through `simple` was rejected: it would drop the
+  stemming that makes `charges` match `charge`, and Arabic needs its own stemmer more than English
+  does. `unaccent`, trigram similarity, and translation were rejected as out of scale for an MVP
+  whose corpus is a few hundred articles.
+- **Consequences:** The vector roughly doubles in size and each configuration numbers positions
+  from 1, so a combined `ts_rank` is an approximation of relevance rather than a precise score —
+  acceptable for choosing five chunks, and the reason the ordering tie-breaks on article and chunk
+  id to stay deterministic. English stopwords are still removed by the English pass and Arabic
+  stopwords by the Arabic pass, so a mixed article is indexed sensibly in both. A third language is
+  one entry in `SEARCH_CONFIGS` plus a migration that rebuilds vectors; nothing per-caller changes.
+  Cross-language retrieval still does not happen: an Arabic ticket does not find an English
+  article, because this is keyword matching, not translation.
+- **Verification:** `apps/knowledge/tests/test_indexing.py` proves an Arabic article is matched by
+  an Arabic query and that one vector carries the lexemes of both languages.
+  `apps/ai_assistant/tests/test_retrieval.py` proves an Arabic ticket retrieves the Arabic article
+  with its citation, and `apps/knowledge/tests/test_seed_command.py` proves the seeded Arabic
+  article is cited by an Arabic ticket while the English corpus stays invisible to another tenant.
+
 ## Changelog
 Add dated entries as features or specs change. Keep this file concise; detailed implementation notes belong in pull requests.
+
+- 2026-11-04: Retrieval in both shipped languages. `SEARCH_CONFIGS = ("english", "arabic")`,
+  with each chunk's `search_vector` holding the concatenation of one vector per configuration and
+  each query combining one `SearchQuery` per configuration, so one column and one `GIN` index
+  serve a bilingual corpus. The term extractor now keeps Unicode letters instead of ASCII, which
+  was the actual reason an Arabic ticket returned nothing: it produced an empty query and the
+  ungrounded fallback looked like an answer. Added migration `knowledge.0002` to rebuild vectors
+  for existing rows, one Arabic article to the seed corpus, and tests for Arabic indexing,
+  Arabic retrieval, and the seeded Arabic source. Recorded ADR-039 and corrected ADR-038's
+  consequence about English-only stemming.
 
 - 2026-11-04: Phase 7 knowledge base and retrieval, T7.1–T7.6. New `apps/knowledge`: `KnowledgeArticle`
   (draft/published/archived, version, indexing state) and `KnowledgeChunk` (workspace copied onto the
@@ -592,6 +649,18 @@ Add dated entries as features or specs change. Keep this file concise; detailed 
   bilingual and in the navigation for every member, with its publish action reflected per role. Backend
   suite green; frontend 196 tests, typecheck, lint, and axe. Phase 7's exit criterion is met: a draft
   cites correct tenant-scoped published sources, proven by retrieval tests. Recorded ADR-038.
+
+- 2026-11-04: Demo knowledge corpus. `manage.py seed_knowledge --workspace <slug>` publishes six
+  realistic articles (duplicate charges, subscription changes, account access, delivery, outages,
+  response times) and indexes them in the calling process, so a fresh workspace can show a draft
+  with citations instead of the ungrounded fallback that FR-035 requires until articles exist. The
+  command is idempotent by title, defaults its author to the workspace owner, refuses a slug it
+  cannot resolve by listing the active ones, and reuses the article services for the lifecycle.
+  `set_publication` gained an `enqueue_indexing` flag so publishing still has one implementation
+  while a caller that indexes immediately needs no broker. Covered by
+  `apps/knowledge/tests/test_seed_command.py`, which asserts the corpus is published, indexed,
+  citable by a duplicate-charge ticket, invisible to another workspace, and unchanged by a second
+  run.
 
 - 2026-11-02: Real AI provider for manual testing, and one command for the stack. Added
   `GeminiAIProvider` (`AI_PROVIDER=gemini`) over the documented `generateContent` REST method: the

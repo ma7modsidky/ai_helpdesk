@@ -198,6 +198,24 @@ process only, and travels in a request header — never in a URL, a log line, or
 OpenRouter's free models, or a local Ollama each need one more `AIProvider` class plus one entry
 in `_PROVIDERS`.
 
+### Seeding knowledge so a draft has something to cite
+
+Retrieval only reads published, currently indexed articles, so a fresh workspace makes every
+draft ungrounded: the prompt is told there are no sources and the panel says so. `seed_knowledge`
+publishes six realistic articles (refunds, subscriptions, account access, delivery, outages, and
+response times) into an existing workspace and indexes them before it returns.
+
+```bash
+cd backend
+uv run python manage.py seed_knowledge --workspace your-workspace-slug
+```
+
+It is idempotent by title, so running it again adds nothing. Indexing happens in the calling
+process, so no worker has to be running for the articles to become retrievable; the workspace
+owner is recorded as the author (`--author someone@example.com` overrides that). An unknown slug
+is refused with the list of active workspaces. Only published articles are retrievable, so
+archiving them is how you return to the ungrounded case for comparison.
+
 Quality checks (run from `backend/`):
 
 ```bash
