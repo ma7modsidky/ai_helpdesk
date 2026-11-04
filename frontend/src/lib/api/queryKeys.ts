@@ -24,6 +24,9 @@ export const queryKeys = {
   /** The ticket's AI jobs; separate from the ticket so a draft poll never refetches it. */
   ticketAIStatus: (workspaceId: string, ticketId: string) =>
     ['workspace', workspaceId, 'ticket', ticketId, 'ai'] as const,
+  /** Knowledge articles, keyed by the filters so a filtered view has its own cache entry. */
+  articles: (workspaceId: string, filters: unknown) =>
+    ['workspace', workspaceId, 'articles', filters] as const,
 };
 
 /** Prefixes for invalidating every cached page of a workspace-scoped collection. */
@@ -31,4 +34,5 @@ export const queryKeyPrefixes = {
   members: (workspaceId: string) => ['workspace', workspaceId, 'members'] as const,
   invitations: (workspaceId: string) => ['workspace', workspaceId, 'invitations'] as const,
   tickets: (workspaceId: string) => ['workspace', workspaceId, 'tickets'] as const,
+  articles: (workspaceId: string) => ['workspace', workspaceId, 'articles'] as const,
 };

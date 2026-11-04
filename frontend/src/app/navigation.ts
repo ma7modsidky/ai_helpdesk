@@ -1,4 +1,5 @@
 import InboxOutlinedIcon from '@mui/icons-material/InboxOutlined';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import type { SvgIconProps } from '@mui/material/SvgIcon';
 import type { ElementType } from 'react';
@@ -22,11 +23,19 @@ export interface WorkspaceNavItem {
 /** Settings screens live under one path segment, shared by the nav entry and the route. */
 export const MEMBERS_SEGMENT = 'settings/members';
 
+/** The knowledge base, between the queue and the settings (07 §5). */
+export const KNOWLEDGE_SEGMENT = 'knowledge';
+
 export const WORKSPACE_NAV_ITEMS: readonly WorkspaceNavItem[] = [
   {
     segment: 'inbox',
     labelKey: 'tickets.inbox.title',
     icon: InboxOutlinedIcon,
+  },
+  {
+    segment: KNOWLEDGE_SEGMENT,
+    labelKey: 'knowledge.title',
+    icon: MenuBookOutlinedIcon,
   },
   {
     segment: MEMBERS_SEGMENT,

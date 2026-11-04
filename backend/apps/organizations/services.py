@@ -133,6 +133,8 @@ class Capability(StrEnum):
     TICKETS_ASSIGN_SELF = "tickets.assign_self"
     TICKETS_ASSIGN_OTHERS = "tickets.assign_others"
     TICKETS_TRANSITION = "tickets.transition"
+    ARTICLES_VIEW = "articles.view"
+    ARTICLES_MANAGE = "articles.manage"
 
 
 _MEMBER_CAPABILITIES = frozenset({Capability.MEMBERS_VIEW, Capability.MEMBERS_MANAGE})
@@ -153,13 +155,17 @@ _TICKET_CAPABILITIES = frozenset(
     }
 )
 _AGENT_TICKET_CAPABILITIES = _TICKET_CAPABILITIES - {Capability.TICKETS_ASSIGN_OTHERS}
+# Reading the knowledge base is a member action; writing or publishing what a model may quote
+# to a customer is administrative (FR-030, FR-032).
+_ARTICLE_VIEW = frozenset({Capability.ARTICLES_VIEW})
+_ARTICLE_CAPABILITIES = frozenset({Capability.ARTICLES_VIEW, Capability.ARTICLES_MANAGE})
 _SELF_SERVICE = frozenset({Capability.MEMBERS_VIEW})
 
 _ROLE_CAPABILITIES: dict[MembershipRole, frozenset[Capability]] = {
-    MembershipRole.OWNER: _MEMBER_CAPABILITIES | _TICKET_CAPABILITIES,
-    MembershipRole.ADMIN: _MEMBER_CAPABILITIES | _TICKET_CAPABILITIES,
-    MembershipRole.MANAGER: _SELF_SERVICE | _TICKET_CAPABILITIES,
-    MembershipRole.AGENT: _SELF_SERVICE | _AGENT_TICKET_CAPABILITIES,
+    MembershipRole.OWNER: _MEMBER_CAPABILITIES | _TICKET_CAPABILITIES | _ARTICLE_CAPABILITIES,
+    MembershipRole.ADMIN: _MEMBER_CAPABILITIES | _TICKET_CAPABILITIES | _ARTICLE_CAPABILITIES,
+    MembershipRole.MANAGER: _SELF_SERVICE | _TICKET_CAPABILITIES | _ARTICLE_VIEW,
+    MembershipRole.AGENT: _SELF_SERVICE | _AGENT_TICKET_CAPABILITIES | _ARTICLE_VIEW,
 }
 
 # Lowest privilege first, so the first role holding a capability is its floor.

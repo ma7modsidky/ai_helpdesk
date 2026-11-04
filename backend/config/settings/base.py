@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "apps.common",
     "apps.accounts",
     "apps.ai_assistant",
+    "apps.knowledge",
     "apps.organizations",
     "apps.tickets",
 ]

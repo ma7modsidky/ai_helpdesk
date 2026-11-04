@@ -322,6 +322,73 @@
       "notPending": "This invitation is no longer pending."
     }
   },
+  "knowledge": {
+    "title": "Knowledge base",
+    "subtitle": "The approved articles the assistant may cite when it drafts a reply.",
+    "readOnly": "You are a {{role}} here, so you can read articles but not add or publish them.",
+    "retrievalWarning": "Only published articles are used in AI drafts. Drafts and archived articles are never retrieved.",
+    "newArticle": "New article",
+    "search": "Search titles",
+    "open": "Open",
+    "filters": {
+      "status": "Status",
+      "all": "All",
+      "draft": "Draft",
+      "published": "Published",
+      "archived": "Archived"
+    },
+    "columns": {
+      "title": "Title",
+      "status": "Status",
+      "indexing": "Indexing",
+      "updated": "Updated",
+      "actions": "Actions"
+    },
+    "empty": {
+      "title": "No articles yet",
+      "description": "Publish an article so the assistant can cite it in a draft.",
+      "filtered": "No articles match these filters."
+    },
+    "pagination": {
+      "summary": "{{total}} articles",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "index": {
+      "status": {
+        "pending": "Queued",
+        "running": "Indexing",
+        "succeeded": "Indexed",
+        "failed": "Indexing failed"
+      },
+      "chunks": "Chunks stored: {{count}}",
+      "error": "The last attempt failed ({{error}}). Reindex to try again.",
+      "stale": "The stored index is older than this article. Reindex it before relying on it.",
+      "notPublished": "Not indexed because the article is not published."
+    },
+    "editor": {
+      "createTitle": "New article",
+      "editTitle": "Edit article",
+      "title": "Title",
+      "body": "Body",
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "Saved. Indexing continues in the background.",
+      "publish": "Publish",
+      "archive": "Archive",
+      "reindex": "Reindex",
+      "close": "Close",
+      "dirtyHint": "Save your changes before publishing, archiving, or reindexing.",
+      "unsavedTitle": "Discard changes?",
+      "unsavedDescription": "This article has unsaved edits. Closing now loses them.",
+      "discard": "Discard changes",
+      "keepEditing": "Keep editing"
+    },
+    "refusals": {
+      "capability": "Your role in this workspace does not allow this change.",
+      "state": "The article's current state does not allow that. Edit an archived article before publishing it."
+    }
+  },
   "invitations": {
     "title": "Workspace invitation",
     "offer": "You are invited to join {{workspace}} as {{role}}.",

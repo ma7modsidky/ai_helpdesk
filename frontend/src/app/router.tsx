@@ -7,7 +7,7 @@ import { RegisterPage } from '@/features/auth/RegisterPage';
 import { AcceptInvitationPage } from '@/features/invitations/AcceptInvitationPage';
 import { WorkspacePickerPage } from '@/features/workspaces/WorkspacePickerPage';
 
-import { DEFAULT_WORKSPACE_SEGMENT, MEMBERS_SEGMENT } from './navigation';
+import { DEFAULT_WORKSPACE_SEGMENT, KNOWLEDGE_SEGMENT, MEMBERS_SEGMENT } from './navigation';
 import { NotFoundPage } from './NotFoundPage';
 import { RequireAuth } from './RequireAuth';
 import { WorkspaceShell } from './WorkspaceShell';
@@ -31,6 +31,12 @@ const TicketDetailPage = lazy(() =>
 
 const MembersPage = lazy(() =>
   import('@/features/members/MembersPage').then((module) => ({ default: module.MembersPage })),
+);
+
+const KnowledgePage = lazy(() =>
+  import('@/features/knowledge/KnowledgePage').then((module) => ({
+    default: module.KnowledgePage,
+  })),
 );
 
 /**
@@ -82,6 +88,14 @@ export function AppRoutes() {
           element={
             <Suspense fallback={<LoadingPanel />}>
               <TicketDetailPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path={KNOWLEDGE_SEGMENT}
+          element={
+            <Suspense fallback={<LoadingPanel />}>
+              <KnowledgePage />
             </Suspense>
           }
         />

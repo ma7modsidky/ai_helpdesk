@@ -508,8 +508,90 @@ Record material decisions using this template.
   non-retryable rejection that does not quote the response body, blocked and empty output, selection
   by name with the key from the environment, a missing key, and the fake-model guard.
 
+### ADR-038: Keyword retrieval over version-stamped chunks, and two states per article
+- **Status:** accepted
+- **Date:** 2026-11-04
+- **Context:** T7.1–T7.5 had to turn the retrieval seam left in ADR-036 into a real knowledge
+  base. Three questions had no answer in the specs: whether retrieval uses full-text search or
+  `pgvector` (T7.3 allowed either), where the indexing state lives and how it relates to the
+  publication state, and what happens to an article that is published while its chunks still
+  describe older text. Each is a correctness question for a draft: a wrong answer means a reply
+  cites a policy that is not live, or a policy that belongs to another workspace.
+- **Decision:** `apps/knowledge` owns `KnowledgeArticle` and `KnowledgeChunk`. The article
+  carries two independent states: `status` (`draft`/`published`/`archived`, the lifecycle a
+  person controls) and `index_status` (`pending`/`running`/`succeeded`/`failed`, the background
+  job), plus `indexed_version`, `index_attempts`, `indexed_at`, and `index_error` holding an
+  exception class only. An article is retrievable only when it is published, its job succeeded,
+  and `indexed_version == version`; anything else is live on the screen and absent from retrieval,
+  which the editor shows rather than hides. Every content edit bumps `version`; publishing an
+  edited article queues indexing again, and archiving queues the job that deletes the chunks.
+  An archived article cannot be republished without editing it first, because reopening text
+  nobody has reviewed is not a publish. Retrieval is PostgreSQL full-text search at one named
+  configuration (`english`): the ticket's words are reduced to letters and digits, at most 24
+  distinct terms joined with `|` and passed as a `raw` query, ranked with `ts_rank`, limited to
+  five chunks, with the `GIN` index on `search_vector` doing the work. The tenant filter is
+  applied to the chunk rows themselves (the workspace is copied onto each chunk) in the same
+  statement that ranks them, and the chunk version must equal the article's current version.
+  Chunks are deterministic: paragraphs packed to about 900 characters with a 120-character
+  overlap, unique on `(article, article_version, chunk_index)`, so a retried job converges and
+  a test can assert the split. The indexing task claims an article only from `pending` or
+  `failed` (the convention of ADR-033) and has no automatic retry, because a failure here means
+  a bug or an unavailable database rather than a transient provider error; the editor offers a
+  reindex action, and the task is idempotent, so two clicks leave one run. Reading takes
+  `articles.view` for every member; writing, publishing, and reindexing take `articles.manage`
+  (owner and admin). A citation names an article, so the draft's source list de-duplicates
+  several chunks of the same article into one entry.
+- **Alternatives:** `pgvector` with embeddings was rejected for the MVP: it adds an embeddings
+  provider, a key, a dimension decision, and a migration, while a fake embedder produces vectors
+  whose ordering is meaningless — so the offline test suite could not prove retrieval works.
+  Keyword search is weaker on paraphrase but it is deterministic, free, and testable, and the
+  retrieval is one module to replace when a real corpus shows keyword matching is not enough.
+  Keeping old chunks after a reindex was rejected: a stale paragraph would remain citable under
+  a current title. Writing the new chunks before deleting the old was rejected for the same
+  reason with extra steps — retrieval would see a mixture of two texts. Storing the job state
+  only in `TaskRecord` was rejected as in ADR-035: the editor needs one row read to show queued,
+  running, done, and failed. Indexing inline in the publish request was rejected: it walks the
+  body and writes rows, which is work a request should not hold a connection for. Token-based
+  chunking was rejected: it needs the provider's tokenizer to be approximately right, and
+  characters bound the prompt cost well enough. Automatic task retries were rejected: they
+  would hide a bug behind a loop, and the failure is already visible where a person can act on
+  it.
+- **Consequences:** The `english` search configuration stems English text only, so an Arabic
+  article is matched on exact words rather than stems — acceptable while the seeded corpus is
+  English, and the reason T7.3 chose keyword search rather than promising semantic recall. A
+  published article is briefly published-but-not-retrievable while its job runs, and the editor
+  says so; that window is the cost of not indexing inside the request. Chunking by characters
+  rather than tokens makes prompt size approximate, so the retrieval bound is the real ceiling.
+  Reindexing rewrites every chunk of an article, which is fine at article granularity and would
+  need to become incremental for a large corpus. Because citations resolve through article ids,
+  a reader follows a title into the knowledge base instead of trusting a copied body.
+- **Verification:** `apps/knowledge/tests/test_chunking.py` asserts the deterministic split,
+  packing, overlap, long-paragraph breaking, and empty input. `test_indexing.py` covers the
+  claim convention, idempotent rewrite, version replacement, stale-chunk removal, the archived
+  path, and failure recorded by class. `test_article_api.py` covers CRUD, capabilities per role,
+  the lifecycle refusals, reindex, and cross-tenant 404s. `apps/ai_assistant/tests/test_retrieval.py`
+  proves a draft cites only published, current-version, same-workspace chunks, that a draft or
+  archived article is invisible, that another workspace's article never matches, that the
+  no-source case degrades safely, and that ticket text cannot inject a query operator.
+
 ## Changelog
 Add dated entries as features or specs change. Keep this file concise; detailed implementation notes belong in pull requests.
+
+- 2026-11-04: Phase 7 knowledge base and retrieval, T7.1–T7.6. New `apps/knowledge`: `KnowledgeArticle`
+  (draft/published/archived, version, indexing state) and `KnowledgeChunk` (workspace copied onto the
+  row, version stamp, `search_vector` with a `GIN` index), migration `knowledge.0001`. Endpoints:
+  list, create, detail, `PATCH`, `publish`, and `reindex`, with `articles.view` for every member and
+  `articles.manage` (owner, admin) for writes. Deterministic chunking (900 characters, paragraph-packed,
+  120-character overlap) runs in a queued task that claims the article from `pending` or `failed`, so a
+  retried job converges; a failure is recorded by exception class on the article and retried from the
+  screen. Retrieval in `apps/ai_assistant/sources.py` ranks published, current-version, same-workspace
+  chunks by full-text query and caps the prompt at five, so a draft can only cite what was retrieved;
+  the sentence case where nothing matches degrades to an ungrounded acknowledgement instead of an
+  invented policy. The knowledge screen (list with status and indexing state, editor with the
+  published-only warning, publish/archive, reindex with its failure state, unsaved-change guard) is
+  bilingual and in the navigation for every member, with its publish action reflected per role. Backend
+  suite green; frontend 196 tests, typecheck, lint, and axe. Phase 7's exit criterion is met: a draft
+  cites correct tenant-scoped published sources, proven by retrieval tests. Recorded ADR-038.
 
 - 2026-11-02: Real AI provider for manual testing, and one command for the stack. Added
   `GeminiAIProvider` (`AI_PROVIDER=gemini`) over the documented `generateContent` REST method: the

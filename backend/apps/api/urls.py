@@ -14,6 +14,10 @@ urlpatterns = [
         "workspaces/<uuid:workspace_id>/tickets/",
         include("apps.tickets.urls"),
     ),
+    path(
+        "workspaces/<uuid:workspace_id>/articles/",
+        include("apps.knowledge.urls"),
+    ),
     path("workspaces/", include("apps.organizations.urls")),
     path("invitations/", include("apps.organizations.invitation_urls")),
     path("schema/", SpectacularAPIView.as_view(), name="openapi-schema"),

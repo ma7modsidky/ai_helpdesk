@@ -19,6 +19,7 @@ export const CAPABILITIES = [
   'tickets.assign_self',
   'tickets.assign_others',
   'tickets.transition',
+  'articles.manage',
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -38,12 +39,14 @@ export const ROLE_CAPABILITIES: Record<MembershipRole, readonly Capability[]> = 
     'members.manage',
     'members.transfer',
     'invitations.manage',
+    'articles.manage',
   ],
   admin: [
     ...TICKET_CAPABILITIES_FOR_EVERY_ROLE,
     'tickets.assign_others',
     'members.manage',
     'invitations.manage',
+    'articles.manage',
   ],
   manager: [...TICKET_CAPABILITIES_FOR_EVERY_ROLE, 'tickets.assign_others'],
   agent: [...TICKET_CAPABILITIES_FOR_EVERY_ROLE],

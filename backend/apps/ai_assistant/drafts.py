@@ -117,10 +117,17 @@ def succeed_draft(
     and copying article bodies into the draft row would duplicate the knowledge base.
     """
     by_id = {source.id: source for source in sources}
-    cited = [
-        {"article_id": by_id[source_id].id, "title": by_id[source_id].title}
-        for source_id in draft.source_ids
-    ]
+    cited: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for source_id in draft.source_ids:
+        source = by_id[source_id]
+        # Several retrieved chunks can belong to one article. The citation is the article, so
+        # the list the reader sees names it once rather than once per chunk.
+        article_id = source.article_id or source.id
+        if article_id in seen:
+            continue
+        seen.add(article_id)
+        cited.append({"article_id": article_id, "title": source.title})
     ReplyDraft.objects.filter(pk=job.pk).update(
         status=TaskStatus.SUCCEEDED,
         finished_at=timezone.now(),
